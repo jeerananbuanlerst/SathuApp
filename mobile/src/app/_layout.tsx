@@ -1,18 +1,19 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
-import { useColorScheme } from 'react-native';
+import { Slot } from 'expo-router';
+import * as Linking from 'expo-linking';
+import { useEffect } from 'react';
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
+export default function Layout() {
+  const scheme = Linking.createURL('/');
 
-SplashScreen.preventAutoHideAsync();
+  useEffect(() => {
+    // ฟังก์ชันนี้จะคอยฟังว่ามี URL แปลกๆ ส่งเข้ามาที่แอปไหม
+    const subscription = Linking.addEventListener('url', (event) => {
+      let { path } = Linking.parse(event.url);
+      console.log('Deep link received:', path);
+    });
 
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
-  return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
-    </ThemeProvider>
-  );
+    return () => subscription.remove();
+  }, []);
+
+  return <Slot />;
 }
