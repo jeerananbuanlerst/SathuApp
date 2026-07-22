@@ -9,7 +9,7 @@ const notoThai = Noto_Sans_Thai({
 
 export const metadata: Metadata = {
   title: "Sathu Admin",
-  description: "Sathu Activity Recommendation",
+  description: "ระบบจัดการกิจกรรมทางศาสนา",
 };
 
 export default function RootLayout({
@@ -19,7 +19,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="th">
-      <body className={`${notoThai.variable} bg-cream`}>
+      <body className={`${notoThai.variable}`}>
         {children}
       </body>
     </html>
