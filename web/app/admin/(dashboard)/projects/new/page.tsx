@@ -1,195 +1,243 @@
 "use client"
 
 import type React from "react"
-
 import Link from "next/link"
 import { useState, useRef } from "react"
-import { ArrowLeft, ImagePlus, X, Check } from "lucide-react"
-import { Card, SectionHeading } from "@/components/admin/ui"
+import { useRouter } from "next/navigation"
+import { ArrowLeft, X, DollarSign, ImagePlus } from "lucide-react"
+import { supabase } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
 
-const categories = ["ไถ่ชีวิตสัตว์", "บูรณะศาสนสถาน", "สาธารณสงเคราะห์", "การศึกษา", "อื่นๆ"]
-const quickAmounts = [10000, 50000, 100000, 250000]
+const categories = [
+  "บริจาคอาหารแก่สัตว์", 
+  "ประเพณี", 
+  "ซ่อมบำรุงวัด", 
+  "เสี่ยงดวงชะตา", 
+  "ถวายสังฆทาน", 
+  "ทุนการศึกษา",
+  "อื่นๆ"
+]
+
+const quickAmounts = [20, 50, 100, 300, 500, 1000]
 
 export default function NewProjectPage() {
-  const [images, setImages] = useState<string[]>([])
+  const router = useRouter()
+
+  const [title, setTitle] = useState("")
+  const [description, setDescription] = useState("")
   const [category, setCategory] = useState(categories[0])
   const [goal, setGoal] = useState("")
-  const [submitted, setSubmitted] = useState(false)
+  const [endDate, setEndDate] = useState("")
+  const [imagePreview, setImagePreview] = useState("") // เริ่มต้นเป็นค่าว่าง ไม่ใส่รูปมั่วๆ
+  const [loading, setLoading] = useState(false)
+  
   const fileRef = useRef<HTMLInputElement>(null)
 
-  function handleFiles(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = e.target.files
-    if (!files) return
-    const urls = Array.from(files).map((f) => URL.createObjectURL(f))
-    setImages((prev) => [...prev, ...urls])
+  const handleFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setImagePreview(URL.createObjectURL(file))
+    }
   }
 
-  function removeImage(idx: number) {
-    setImages((prev) => prev.filter((_, i) => i !== idx))
-  }
+  const handleSave = async (status: "active" | "draft") => {
+    if (!title || !goal) {
+      alert("กรุณากรอกชื่อโปรเจคและเป้าหมายเงินบริจาค")
+      return
+    }
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setSubmitted(true)
-    setTimeout(() => setSubmitted(false), 2500)
+    setLoading(true)
+    try {
+      const { error } = await supabase.from("admin_projects").insert([
+        {
+          title,
+          category,
+          description,
+          goal: Number(goal),
+          raised: 0,
+          donors: 0,
+          end_date: endDate || null,
+          image: imagePreview || "https://images.unsplash.com/photo-1544816155-12df9643f363",
+          status: status,
+        },
+      ])
+
+      if (error) throw error
+
+      alert(status === "active" ? "เปิดรับบริจาคสำเร็จ!" : "บันทึกแบบร่างสำเร็จ!")
+      router.push(status === "active" ? "/admin/projects" : "/admin/projects/drafts")
+    } catch (err: any) {
+      alert("เกิดข้อผิดพลาด: " + err.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const inputClass =
-    "w-full rounded-xl border border-input bg-card px-3.5 py-2.5 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20"
+    "w-full rounded-xl border border-input bg-card px-4 py-3 text-xs text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20"
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-6">
-      <Link href="/admin/projects" className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="size-4" /> กลับไปหน้าโครงการ
-      </Link>
+    <div className="w-full max-w-5xl mx-auto py-8 px-6 space-y-6">
+      
+      {/* ส่วนหัวตาม UI */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Link
+            href="/admin/projects"
+            className="flex h-10 w-10 items-center justify-center rounded-xl bg-card border border-border text-foreground hover:bg-muted transition"
+          >
+            <ArrowLeft size={20} />
+          </Link>
+          <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
+            สร้างโปรเจคบริจาค
+          </h1>
+        </div>
 
-      <SectionHeading title="สร้างโครงการบริจาค" description="กรอกรายละเอียดโครงการ อัปโหลดรูปภาพ และตั้งเป้าหมายยอดบริจาค" />
+        <Link
+          href="/admin/projects/drafts"
+          className="px-4 py-2 rounded-xl bg-[#241A72] text-white text-xs font-semibold shadow-sm hover:opacity-90 transition flex items-center gap-1.5"
+        >
+          ดูแบบร่าง
+        </Link>
+      </div>
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-        <Card className="flex flex-col gap-5">
-          <div>
-            <label htmlFor="title" className="mb-1.5 block text-sm font-medium text-foreground">
-              ชื่อโครงการ
-            </label>
-            <input id="title" required className={inputClass} placeholder="เช่น ไถ่ชีวิตโค-กระบือ ครั้งที่ 25" />
-          </div>
-
-          <div>
-            <span className="mb-1.5 block text-sm font-medium text-foreground">ประเภทกิจกรรม</span>
-            <div className="flex flex-wrap gap-2">
-              {categories.map((c) => (
-                <button
-                  type="button"
-                  key={c}
-                  onClick={() => setCategory(c)}
-                  className={cn(
-                    "rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors",
-                    category === c
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-secondary text-secondary-foreground hover:bg-secondary/70",
-                  )}
-                >
-                  {c}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label htmlFor="desc" className="mb-1.5 block text-sm font-medium text-foreground">
-              รายละเอียดโครงการ
-            </label>
-            <textarea
-              id="desc"
-              required
-              rows={5}
-              className={cn(inputClass, "resize-none leading-relaxed")}
-              placeholder="อธิบายวัตถุประสงค์ ที่มา และแผนการใช้เงินของโครงการนี้..."
-            />
-          </div>
-        </Card>
-
-        <Card className="flex flex-col gap-3">
-          <span className="text-sm font-medium text-foreground">รูปภาพประกอบ</span>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {images.map((src, i) => (
-              <div key={i} className="group relative aspect-square overflow-hidden rounded-xl border border-border">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={src || "/placeholder.svg"} alt={`รูปโครงการ ${i + 1}`} className="size-full object-cover" />
-                <button
-                  type="button"
-                  onClick={() => removeImage(i)}
-                  className="absolute right-1.5 top-1.5 flex size-6 items-center justify-center rounded-full bg-foreground/70 text-background"
-                  aria-label="ลบรูป"
-                >
-                  <X className="size-3.5" />
-                </button>
-              </div>
+      <div className="bg-card rounded-2xl border border-border/60 p-8 shadow-sm space-y-6">
+        
+        {/* วัตถุประสงค์การบริจาค */}
+        <div className="space-y-3">
+          <label className="block text-xs font-bold text-foreground">🎯 วัตถุประสงค์การบริจาค</label>
+          <div className="flex flex-wrap gap-2.5">
+            {categories.map((c) => (
+              <button
+                type="button"
+                key={c}
+                onClick={() => setCategory(c)}
+                className={cn(
+                  "px-4 py-2 rounded-full text-xs font-semibold transition",
+                  category === c
+                    ? "bg-[#241A72] text-white shadow-sm"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80"
+                )}
+              >
+                {c}
+              </button>
             ))}
+          </div>
+        </div>
+
+        {/* อัปโหลดรูปกิจกรรม (เคลียร์รูปเริ่มต้นออก ให้กดเลือกเอง) */}
+        <div className="space-y-3">
+          <label className="block text-xs font-bold text-foreground">📸 อัปโหลดรูปกิจกรรม</label>
+          {imagePreview ? (
+            <div className="relative aspect-video w-full max-w-md rounded-2xl overflow-hidden border border-border bg-muted">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={imagePreview} alt="Preview" className="size-full object-cover" />
+              <button
+                type="button"
+                onClick={() => setImagePreview("")}
+                className="absolute top-2 right-2 p-1.5 rounded-full bg-black/70 text-white"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          ) : (
             <button
               type="button"
               onClick={() => fileRef.current?.click()}
-              className="flex aspect-square flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
+              className="flex flex-col items-center justify-center aspect-video w-full max-w-md rounded-2xl border-2 border-dashed border-border bg-muted/20 hover:bg-muted/40 transition text-muted-foreground cursor-pointer"
             >
-              <ImagePlus className="size-6" />
-              <span className="text-xs font-medium">เพิ่มรูปภาพ</span>
+              <ImagePlus size={32} className="mb-2 text-primary" />
+              <span className="text-xs font-semibold">คลิกเพื่ออัปโหลดรูปภาพกิจกรรม</span>
             </button>
-          </div>
-          <input ref={fileRef} type="file" accept="image/*" multiple onChange={handleFiles} className="hidden" />
-        </Card>
+          )}
+          <input ref={fileRef} type="file" accept="image/*" onChange={handleFiles} className="hidden" />
+        </div>
 
-        <Card className="flex flex-col gap-5">
+        {/* ชื่อโปรเจค */}
+        <div>
+          <label className="block text-xs font-bold text-foreground mb-1">ชื่อโปรเจค *</label>
+          <input
+            type="text"
+            required
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="เช่น บริจาคอาหารให้กับสุนัขจรจัด 24 ตัว"
+            className={inputClass}
+          />
+        </div>
+
+        {/* เป้าหมายเงิน & วันปิดรับ */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <div>
-            <label htmlFor="goal" className="mb-1.5 block text-sm font-medium text-foreground">
-              เป้าหมายยอดบริจาค (บาท)
-            </label>
-            <div className="relative">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">฿</span>
-              <input
-                id="goal"
-                required
-                inputMode="numeric"
-                value={goal}
-                onChange={(e) => setGoal(e.target.value.replace(/[^0-9]/g, ""))}
-                className={cn(inputClass, "pl-8 font-display text-lg font-semibold")}
-                placeholder="0"
-              />
-            </div>
-            <div className="mt-2.5 flex flex-wrap gap-2">
-              {quickAmounts.map((a) => (
-                <button
-                  type="button"
-                  key={a}
-                  onClick={() => setGoal(String(a))}
-                  className="rounded-lg bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-secondary/70"
-                >
-                  {a.toLocaleString("th-TH")}
-                </button>
-              ))}
-            </div>
+            <label className="block text-xs font-bold text-foreground mb-1">เป้าหมายเงิน (บาท) *</label>
+            <input
+              type="text"
+              required
+              inputMode="numeric"
+              value={goal}
+              onChange={(e) => setGoal(e.target.value.replace(/[^0-9]/g, ""))}
+              placeholder="100,000"
+              className={inputClass}
+            />
           </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <label htmlFor="start" className="mb-1.5 block text-sm font-medium text-foreground">
-                วันที่เริ่มต้น
-              </label>
-              <input id="start" type="date" className={inputClass} />
-            </div>
-            <div>
-              <label htmlFor="end" className="mb-1.5 block text-sm font-medium text-foreground">
-                วันที่สิ้นสุด
-              </label>
-              <input id="end" type="date" className={inputClass} />
-            </div>
+          <div>
+            <label className="block text-xs font-bold text-foreground mb-1">วันปิดรับ</label>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className={inputClass}
+            />
           </div>
-        </Card>
+        </div>
 
-        <div className="flex items-center justify-end gap-3">
-          <Link
-            href="/admin/projects"
-            className="rounded-xl border border-border px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary"
-          >
-            บันทึกเป็นฉบับร่าง
-          </Link>
+        {/* รายละเอียดโปรเจค */}
+        <div>
+          <label className="block text-xs font-bold text-foreground mb-1">รายละเอียดโปรเจค</label>
+          <textarea
+            rows={4}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="คำอธิบายโปรเจค..."
+            className={cn(inputClass, "resize-none")}
+          />
+        </div>
+
+        {/* จำนวนเงินแนะนำให้ผู้บริจาคเลือก */}
+        <div className="space-y-3">
+          <label className="block text-xs font-bold text-foreground flex items-center gap-1.5">
+            <DollarSign size={16} className="text-primary" /> จำนวนเงินที่แนะนำให้ผู้บริจาคเลือก
+          </label>
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+            {quickAmounts.map((amt) => (
+              <div key={amt} className="py-3 rounded-xl bg-[#241A72]/10 text-[#241A72] text-xs font-bold text-center border border-[#241A72]/20">
+                {amt.toLocaleString()}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ปุ่มกดเปิดรับบริจาค / บันทึกแบบร่าง */}
+        <div className="space-y-3 pt-4">
           <button
-            type="submit"
-            className={cn(
-              "inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-colors",
-              submitted ? "bg-chart-4" : "bg-primary hover:bg-primary/90",
-            )}
+            type="button"
+            disabled={loading}
+            onClick={() => handleSave("active")}
+            className="w-full py-4 rounded-2xl bg-pink-400 text-white font-bold text-sm shadow-md hover:opacity-95 transition disabled:opacity-50"
           >
-            {submitted ? (
-              <>
-                <Check className="size-4" /> เผยแพร่แล้ว
-              </>
-            ) : (
-              "เผยแพร่โครงการ"
-            )}
+            {loading ? "กำลังบันทึก..." : "เปิดรับบริจาค"}
+          </button>
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => handleSave("draft")}
+            className="w-full py-4 rounded-2xl bg-muted text-foreground font-bold text-sm hover:bg-muted/80 transition disabled:opacity-50"
+          >
+            {loading ? "กำลังบันทึก..." : "บันทึกแบบร่าง"}
           </button>
         </div>
-      </form>
+
+      </div>
     </div>
   )
 }
