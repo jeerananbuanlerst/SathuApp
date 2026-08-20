@@ -3,7 +3,7 @@
 import Link from "next/link"
 import Image from "next/image"
 import { useState, useEffect } from "react"
-import { Plus, CheckCircle2, Clock, Trash2, Edit } from "lucide-react"
+import { Plus, CheckCircle2, Clock, Edit, Ban } from "lucide-react"
 import { supabase } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 
@@ -28,10 +28,19 @@ export default function ProjectsPage() {
     setLoading(false)
   }
 
-  const handleDelete = async (id: string) => {
-    if (confirm("ต้องการปิดรับ/ลบโครงการนี้ใช่หรือไม่?")) {
-      await supabase.from("admin_projects").delete().eq("id", id)
-      setProjects(projects.filter((p) => p.id !== id))
+  // เปลี่ยนเป็นอัปเดตสถานะเป็น ended แทนการลบ
+  const handleCloseProject = async (id: string) => {
+    if (confirm("ต้องการปิดรับโครงการนี้ใช่หรือไม่?")) {
+      const { error } = await supabase
+        .from("admin_projects")
+        .update({ status: "ended" })
+        .eq("id", id)
+
+      if (error) {
+        alert("เกิดข้อผิดพลาด: " + error.message)
+      } else {
+        setProjects(projects.map((p) => (p.id === id ? { ...p, status: "ended" } : p)))
+      }
     }
   }
 
@@ -48,7 +57,6 @@ export default function ProjectsPage() {
   return (
     <div className="w-full max-w-7xl mx-auto py-8 px-6 space-y-6">
       
-      {/* ส่วนหัว & แท็บสถานะ */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
@@ -73,7 +81,6 @@ export default function ProjectsPage() {
         </div>
       </div>
 
-      {/* แท็บตัวเลือกสถานะ */}
       <div className="flex items-center gap-6 border-b border-border pb-2 text-sm font-semibold">
         <button
           onClick={() => setActiveTab("active")}
@@ -101,7 +108,6 @@ export default function ProjectsPage() {
         </button>
       </div>
 
-      {/* รายการโครงการ (แสดงรูปภาพประกอบสวยงาม) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {loading ? (
           <div className="col-span-full text-center py-16 text-muted-foreground text-xs">กำลังโหลดข้อมูล...</div>
@@ -119,12 +125,12 @@ export default function ProjectsPage() {
             return (
               <div key={p.id} className="bg-card rounded-2xl border border-border/60 overflow-hidden shadow-sm flex flex-col justify-between group">
                 
-                {/* ส่วนแสดงรูปภาพโครงการ */}
                 <div className="relative h-48 w-full bg-muted">
                   <Image
                     src={p.image || "https://images.unsplash.com/photo-1544816155-12df9643f363"}
                     alt={p.title}
                     fill
+                    sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                     className="object-cover group-hover:scale-105 transition duration-300"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
@@ -146,7 +152,6 @@ export default function ProjectsPage() {
                   </div>
                 </div>
 
-                {/* เนื้อหาการ์ด */}
                 <div className="p-5 space-y-4 flex-1 flex flex-col justify-between">
                   <div className="space-y-1.5">
                     <h3 className="text-sm font-bold text-foreground leading-snug line-clamp-1">{p.title}</h3>
@@ -164,7 +169,6 @@ export default function ProjectsPage() {
                     </div>
                   </div>
 
-                  {/* แถบปุ่มกดทำงาน */}
                   <div className="flex items-center justify-between pt-3 border-t border-border/40">
                     <button
                       onClick={() => router.push(`/admin/projects/edit/${p.id}`)}
@@ -173,12 +177,14 @@ export default function ProjectsPage() {
                       <Edit size={12} /> แก้ไข
                     </button>
 
-                    <button
-                      onClick={() => handleDelete(p.id)}
-                      className="px-4 py-1.5 rounded-xl border border-rose-500 text-rose-500 text-xs font-semibold hover:bg-rose-50 transition flex items-center gap-1"
-                    >
-                      <Trash2 size={12} /> ปิดรับ
-                    </button>
+                    {!isEnded && (
+                      <button
+                        onClick={() => handleCloseProject(p.id)}
+                        className="px-4 py-1.5 rounded-xl border border-rose-500 text-rose-500 text-xs font-semibold hover:bg-rose-50 transition flex items-center gap-1"
+                      >
+                        <Ban size={12} /> ปิดรับ
+                      </button>
+                    )}
                   </div>
                 </div>
 

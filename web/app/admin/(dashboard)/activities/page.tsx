@@ -34,14 +34,36 @@ export default function ActivitiesPage() {
 
   const [selectedDate, setSelectedDate] = useState(getLocalDateString(today));
   const [activities, setActivities] = useState<Activity[]>([]);
+  const [monthEventDates, setMonthEventDates] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // State สำหรับเปิด Modal ดูรายละเอียด
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
+
+  useEffect(() => {
+    fetchMonthEvents();
+  }, [currentYear, currentMonth]);
 
   useEffect(() => {
     fetchActivities();
   }, [selectedDate]);
+
+  const fetchMonthEvents = async () => {
+    const startDate = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-01`;
+    const lastDay = new Date(currentYear, currentMonth + 1, 0).getDate();
+    const endDate = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${lastDay}`;
+
+    const { data } = await supabase
+      .from("admin_activities")
+      .select("date")
+      .eq("status", "published")
+      .gte("date", startDate)
+      .lte("date", endDate);
+
+    if (data) {
+      const dates = data.map((item) => item.date);
+      setMonthEventDates(dates);
+    }
+  };
 
   const fetchActivities = async () => {
     setLoading(true);
@@ -59,6 +81,7 @@ export default function ActivitiesPage() {
     if (confirm("คุณต้องการลบกิจกรรมนี้ใช่หรือไม่?")) {
       await supabase.from("admin_activities").delete().eq("id", id);
       setActivities(activities.filter((a) => a.id !== id));
+      fetchMonthEvents();
     }
   };
 
@@ -152,20 +175,23 @@ export default function ActivitiesPage() {
                 const dateStr = getLocalDateString(dateObj);
                 const isSelected = selectedDate === dateStr;
                 const isToday = dateStr === getLocalDateString(today);
+                const hasEvent = monthEventDates.includes(dateStr);
 
                 return (
                   <button
                     key={dateStr}
                     onClick={() => setSelectedDate(dateStr)}
-                    className={`py-2 rounded-xl text-xs font-semibold transition relative ${
+                    className={`py-2 rounded-xl text-xs font-semibold transition relative flex flex-col items-center justify-center ${
                       isSelected
                         ? "bg-[#241A72] text-white shadow-md"
+                        : hasEvent
+                        ? "bg-pink-100 text-pink-700 font-bold border border-pink-300" // 👈 เปลี่ยนเป็นไฮไลต์สีชมพูอ่อนแทนจุดแดง ไม่ทับตัวเลข
                         : isToday
                         ? "border border-primary text-primary"
                         : "bg-muted/30 text-foreground hover:bg-muted"
                     }`}
                   >
-                    {dateObj.getDate()}
+                    <span>{dateObj.getDate()}</span>
                   </button>
                 );
               })}
@@ -198,34 +224,35 @@ export default function ActivitiesPage() {
           ) : (
             <div className="space-y-4">
               {activities.map((act) => (
-                <div key={act.id} className="bg-card rounded-2xl border border-border/60 p-5 shadow-sm flex flex-col sm:flex-row gap-5 items-start sm:items-center justify-between">
-                  <div className="flex items-start gap-4 w-full sm:w-auto">
+                <div key={act.id} className="bg-card rounded-2xl border border-border/60 p-5 shadow-sm flex flex-col md:flex-row gap-5 items-start justify-between">
+                  <div className="flex items-start gap-4 w-full">
                     <div className="relative w-28 h-28 rounded-xl overflow-hidden bg-muted shrink-0">
                       <Image src={act.image || "/placeholder.svg"} alt={act.title} fill className="object-cover object-center" />
                     </div>
-                    <div className="space-y-1.5 flex-1">
-                      <div className="flex items-center justify-between">
-                        <h3 className="text-sm font-bold text-foreground">{act.title}</h3>
-                        <span className="px-2.5 py-0.5 rounded-full bg-[#241A72] text-white text-[10px] font-semibold">
+                    
+                    <div className="space-y-2 flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h3 className="text-sm font-bold text-foreground leading-snug break-words">{act.title}</h3>
+                        <span className="px-2.5 py-0.5 rounded-full bg-[#241A72] text-white text-[10px] font-semibold shrink-0">
                           เผยแพร่แล้ว
                         </span>
                       </div>
                       <p className="text-xs text-muted-foreground">📍 สถานที่: {act.location}</p>
                       <p className="text-xs text-muted-foreground">📅 วันที่: {act.date} | ⏰ เวลา: {act.time}</p>
-                      <p className="text-xs text-foreground line-clamp-2 mt-1">{act.description}</p>
+                      <p className="text-xs text-foreground line-clamp-2">{act.description}</p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 w-full sm:w-auto pt-3 sm:pt-0 border-t sm:border-t-0 border-border/40 justify-end">
+                  <div className="flex items-center gap-2 w-full md:w-auto pt-3 md:pt-0 border-t md:border-t-0 border-border/40 justify-end shrink-0">
                     <button
                       onClick={() => setSelectedActivity(act)}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary/10 text-primary text-xs font-semibold hover:bg-primary/20 transition"
+                      className="inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-primary/10 text-primary text-xs font-semibold hover:bg-primary/20 transition whitespace-nowrap"
                     >
                       <Eye size={14} /> ดูรายละเอียด
                     </button>
                     <button
                       onClick={() => handleDeleteActivity(act.id)}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-destructive/10 text-destructive text-xs font-semibold hover:bg-destructive/20 transition"
+                      className="inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-destructive/10 text-destructive text-xs font-semibold hover:bg-destructive/20 transition whitespace-nowrap"
                     >
                       <Trash2 size={14} /> ลบ
                     </button>
@@ -238,10 +265,10 @@ export default function ActivitiesPage() {
 
       </div>
 
-      {/* Modal: แสดงรายละเอียดกิจกรรมเต็มๆ เป็นการ์ด */}
+      {/* Modal: แสดงรายละเอียดกิจกรรม */}
       {selectedActivity && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="bg-card rounded-2xl max-w-xl w-full p-6 space-y-4 shadow-xl relative">
+          <div className="bg-card rounded-2xl max-w-xl w-full p-6 space-y-4 shadow-xl relative max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-border pb-3">
               <h3 className="font-bold text-sm text-foreground">รายละเอียดกิจกรรม</h3>
               <button onClick={() => setSelectedActivity(null)} className="text-muted-foreground hover:text-foreground">

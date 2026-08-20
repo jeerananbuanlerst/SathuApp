@@ -1,177 +1,203 @@
-import Image from "next/image"
-import { ShieldCheck, FileText, Plus, Download, CheckCircle2, TrendingUp } from "lucide-react"
+"use client"
+
+import type React from "react"
+import { useState, useEffect, useRef } from "react"
+import { useRouter } from "next/navigation"
+import { ArrowLeft, ShieldCheck, Plus, Download, CheckCircle2, ImagePlus, X } from "lucide-react"
 import { Card, SectionHeading, Progress } from "@/components/admin/ui"
-import { expenses, progressUpdates, projects, formatBaht } from "@/lib/mock-data"
+import { supabase } from "@/lib/supabase/client"
 
 export default function TransparencyPage() {
-  const totalRaised = projects.reduce((s, p) => s + p.raised, 0)
-  const totalSpent = expenses.reduce((s, e) => s + e.amount, 0)
-  const remaining = totalRaised - totalSpent
-  const spentPct = Math.round((totalSpent / totalRaised) * 100)
+  const router = useRouter()
+  const [projects, setProjects] = useState<any[]>([])
+  const [selectedProject, setSelectedProject] = useState("")
+  const [reportDetail, setReportDetail] = useState("")
+  const [images, setImages] = useState<string[]>([])
+  const [loading, setLoading] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
 
-  // group expenses by category
-  const byCategory = expenses.reduce<Record<string, number>>((acc, e) => {
-    acc[e.category] = (acc[e.category] ?? 0) + e.amount
-    return acc
-  }, {})
-  const catColors: Record<string, string> = {
-    ไถ่ชีวิตสัตว์: "bg-primary",
-    บูรณะศาสนสถาน: "bg-accent",
-    สาธารณสงเคราะห์: "bg-chart-3",
+  // ดึงข้อมูลโครงการบริจาคจริงจาก Supabase (admin_projects)
+  useEffect(() => {
+    fetchProjects()
+  }, [])
+
+  const fetchProjects = async () => {
+    const { data } = await supabase
+      .from("admin_projects")
+      .select("*")
+      .order("created_at", { ascending: false })
+
+    if (data) {
+      setProjects(data)
+    }
+  }
+
+  const handleFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files) return
+    const urls = Array.from(files).map((f) => URL.createObjectURL(f))
+    setImages((prev) => [...prev, ...urls])
+  }
+
+  const handlePublishReport = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selectedProject || !reportDetail) {
+      alert("กรุณาเลือกโครงการและกรอกรายละเอียดความคืบหน้า")
+      return
+    }
+    setLoading(true)
+    setTimeout(() => {
+      setLoading(false)
+      alert("อัปเดตรายงานความโปร่งใสสำเร็จ!")
+      setSelectedProject("")
+      setReportDetail("")
+      setImages([])
+    }, 1000)
+  }
+
+  const formatBaht = (amount: number) => {
+    return new Intl.NumberFormat("th-TH").format(amount) + " บ."
   }
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-6">
-      <Card className="flex flex-col gap-4 bg-primary/5">
-        <div className="flex items-start gap-3">
-          <div className="flex size-11 items-center justify-center rounded-xl bg-primary/15 text-primary">
-            <ShieldCheck className="size-6" />
-          </div>
-          <div>
-            <h2 className="font-display text-lg font-semibold text-foreground">รายงานความโปร่งใส</h2>
-            <p className="text-sm text-muted-foreground">
-              สรุปการรับและใช้จ่ายเงินบริจาคทั้งหมด เปิดเผยต่อสาธารณะเพื่อความไว้วางใจของญาติโยม
-            </p>
-          </div>
-        </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div className="rounded-xl bg-card p-4">
-            <p className="text-sm text-muted-foreground">รับบริจาคทั้งหมด</p>
-            <p className="mt-1 font-display text-xl font-bold text-foreground">{formatBaht(totalRaised)}</p>
-          </div>
-          <div className="rounded-xl bg-card p-4">
-            <p className="text-sm text-muted-foreground">ใช้จ่ายแล้ว</p>
-            <p className="mt-1 font-display text-xl font-bold text-accent">{formatBaht(totalSpent)}</p>
-          </div>
-          <div className="rounded-xl bg-card p-4">
-            <p className="text-sm text-muted-foreground">คงเหลือ</p>
-            <p className="mt-1 font-display text-xl font-bold text-chart-4">{formatBaht(remaining)}</p>
-          </div>
-        </div>
-        <div>
-          <div className="flex justify-between text-xs text-muted-foreground">
-            <span>ใช้จ่ายไปแล้ว {spentPct}%</span>
-            <span>คงเหลือ {100 - spentPct}%</span>
-          </div>
-          <Progress value={spentPct} className="mt-1.5 h-3" />
-        </div>
-      </Card>
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Expense breakdown */}
-        <Card className="lg:col-span-2">
-          <SectionHeading
-            title="บัญชีรายจ่าย"
-            description="รายการใช้จ่ายพร้อมเลขที่ใบเสร็จ"
-            action={
-              <button className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary">
-                <Download className="size-4" /> ดาวน์โหลด
-              </button>
-            }
-          />
-          <div className="mt-4 overflow-hidden rounded-xl border border-border">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-secondary/50 text-left text-xs font-medium text-muted-foreground">
-                  <th className="px-4 py-3">รายการ</th>
-                  <th className="hidden px-4 py-3 sm:table-cell">ใบเสร็จ</th>
-                  <th className="px-4 py-3">วันที่</th>
-                  <th className="px-4 py-3 text-right">จำนวนเงิน</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {expenses.map((e) => (
-                  <tr key={e.id} className="hover:bg-secondary/30">
-                    <td className="px-4 py-3">
-                      <p className="font-medium text-foreground">{e.item}</p>
-                      <p className="text-xs text-muted-foreground">{e.category}</p>
-                    </td>
-                    <td className="hidden px-4 py-3 sm:table-cell">
-                      <span className="inline-flex items-center gap-1 text-xs text-primary">
-                        <FileText className="size-3.5" /> {e.receipt}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">{e.date}</td>
-                    <td className="px-4 py-3 text-right font-semibold text-foreground">{formatBaht(e.amount)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-
-        {/* Category summary */}
-        <Card>
-          <SectionHeading title="สัดส่วนการใช้จ่าย" />
-          <div className="mt-4 flex flex-col gap-4">
-            {Object.entries(byCategory).map(([cat, amount]) => {
-              const pct = Math.round((amount / totalSpent) * 100)
-              return (
-                <div key={cat}>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="flex items-center gap-2 font-medium text-foreground">
-                      <span className={`size-2.5 rounded-full ${catColors[cat] ?? "bg-muted-foreground"}`} />
-                      {cat}
-                    </span>
-                    <span className="text-muted-foreground">{pct}%</span>
-                  </div>
-                  <p className="mt-0.5 pl-4.5 text-xs text-muted-foreground">{formatBaht(amount)}</p>
-                  <Progress value={pct} className="mt-1.5" />
-                </div>
-              )
-            })}
-          </div>
-        </Card>
+    <div className="w-full max-w-4xl mx-auto py-8 px-6 space-y-6">
+      
+      {/* ส่วนหัวตาม UX/UI */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => router.push("/admin/dashboard")}
+          className="flex h-10 w-10 items-center justify-center rounded-xl bg-card border border-border text-foreground hover:bg-muted transition"
+        >
+          <ArrowLeft size={20} />
+        </button>
+        <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
+          รายงานความโปร่งใส
+        </h1>
       </div>
 
-      {/* Progress updates */}
-      <Card>
-        <SectionHeading
-          title="อัปเดตความคืบหน้า"
-          description="รายงานความคืบหน้าและการใช้เงินของแต่ละโครงการ"
-          action={
-            <button className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90">
-              <Plus className="size-4" /> เพิ่มอัปเดต
+      {/* รายการโปรเจคทั้งหมดที่ดึงมาจาก admin/projects */}
+      <div className="space-y-4">
+        <h2 className="text-sm font-bold text-foreground">โปรเจคทั้งหมด</h2>
+        
+        {projects.length === 0 ? (
+          <div className="text-center py-12 bg-card rounded-2xl border border-border/60 text-muted-foreground text-xs">
+            ยังไม่มีโครงการบริจาคในระบบ
+          </div>
+        ) : (
+          projects.map((p) => {
+            const raised = p.raised || 0
+            const goal = p.goal || 1
+            const pct = Math.min(Math.round((raised / goal) * 100), 100)
+
+            return (
+              <div key={p.id} className="bg-card rounded-2xl border border-border/60 p-5 shadow-sm space-y-3">
+                <div className="flex items-start justify-between">
+                  <h3 className="text-sm font-bold text-foreground leading-snug">{p.title}</h3>
+                  <span className="px-3 py-1 rounded-full bg-amber-500/10 text-amber-600 text-[10px] font-semibold">
+                    {p.status === "active" ? "กำลังดำเนินการ" : "เสร็จสิ้น"}
+                  </span>
+                </div>
+
+                <div className="text-xs text-muted-foreground">
+                  เป้าหมาย {formatBaht(goal)}
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-xs font-semibold">
+                    <span className="text-foreground">{formatBaht(raised)} / {formatBaht(goal)}</span>
+                    <span className="text-muted-foreground">{pct} %</span>
+                  </div>
+                  <div className="h-2.5 w-full bg-muted rounded-full overflow-hidden">
+                    <div className="h-full bg-pink-400 rounded-full" style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              </div>
+            )
+          })
+        )}
+      </div>
+
+      {/* ฟอร์ม: อัปเดตความคืบหน้า */}
+      <div className="bg-card rounded-2xl border border-border/60 p-6 shadow-sm space-y-5">
+        <h3 className="text-sm font-bold text-foreground">อัปเดตความคืบหน้า</h3>
+
+        <form onSubmit={handlePublishReport} className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-foreground mb-1">เลือกโปรเจค</label>
+            <select
+              value={selectedProject}
+              onChange={(e) => setSelectedProject(e.target.value)}
+              className="w-full rounded-xl border border-input bg-card px-4 py-3 text-xs text-foreground outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"
+            >
+              <option value="">เลือกโปรเจคของคุณ...</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.title}>
+                  {p.title}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-foreground mb-1">รายละเอียดความคืบหน้า</label>
+            <textarea
+              rows={4}
+              value={reportDetail}
+              onChange={(e) => setReportDetail(e.target.value)}
+              placeholder="รายงานเรื่อง..."
+              className="w-full rounded-xl border border-input bg-card px-4 py-3 text-xs text-foreground outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 resize-none"
+            />
+          </div>
+
+          {/* อัปโหลดรูปภาพรายงาน */}
+          <div className="space-y-2">
+            <div className="grid grid-cols-3 gap-3">
+              {images.map((src, i) => (
+                <div key={i} className="relative aspect-square rounded-xl overflow-hidden border border-border bg-muted">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={src} alt="Upload" className="size-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => setImages(images.filter((_, idx) => idx !== i))}
+                    className="absolute top-1.5 right-1.5 p-1 rounded-full bg-black/70 text-white"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                className="flex flex-col items-center justify-center aspect-square rounded-xl border-2 border-dashed border-border bg-muted/20 hover:bg-muted/40 transition text-muted-foreground"
+              >
+                <Plus size={24} className="mb-1 text-primary" />
+                <span className="text-[10px] font-semibold">เพิ่มรูป</span>
+              </button>
+            </div>
+            <input ref={fileRef} type="file" accept="image/*" multiple onChange={handleFiles} className="hidden" />
+          </div>
+
+          {/* ปุ่มดำเนินการ */}
+          <div className="space-y-3 pt-2">
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-4 rounded-2xl bg-pink-400 text-white font-bold text-sm shadow-md hover:opacity-95 transition disabled:opacity-50"
+            >
+              {loading ? "กำลังอัปเดต..." : "อัปเดตรายงาน"}
             </button>
-          }
-        />
-        <ol className="mt-5 flex flex-col gap-6">
-          {progressUpdates.map((u, i) => (
-            <li key={u.id} className="relative flex gap-4 pl-2">
-              <div className="flex flex-col items-center">
-                <span className="flex size-9 items-center justify-center rounded-full bg-primary/10 text-primary">
-                  <CheckCircle2 className="size-5" />
-                </span>
-                {i < progressUpdates.length - 1 && <span className="mt-1 w-px flex-1 bg-border" />}
-              </div>
-              <div className="flex-1 pb-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-secondary-foreground">
-                    {u.project}
-                  </span>
-                  <span className="text-xs text-muted-foreground">{u.date}</span>
-                </div>
-                <h4 className="mt-2 font-display font-semibold text-foreground">{u.title}</h4>
-                <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{u.detail}</p>
-                <div className="mt-2 flex items-center gap-2">
-                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent">
-                    <TrendingUp className="size-3.5" /> ใช้เงิน {formatBaht(u.amountUsed)}
-                  </span>
-                </div>
-                {u.image && (
-                  <Image
-                    src={u.image || "/placeholder.svg"}
-                    alt={u.title}
-                    width={480}
-                    height={200}
-                    className="mt-3 h-40 w-full max-w-md rounded-xl object-cover"
-                  />
-                )}
-              </div>
-            </li>
-          ))}
-        </ol>
-      </Card>
+
+            <button
+              type="button"
+              onClick={() => alert("กำลังดาวน์โหลดและส่งออกรายงานเป็น PDF...")}
+              className="w-full py-3.5 rounded-2xl bg-card border border-border text-[#241A72] text-xs font-bold shadow-sm hover:bg-muted transition flex items-center justify-center gap-2"
+            >
+              <Download size={16} /> Export รายงานเป็น PDF ส่งให้ผู้บริจาค
+            </button>
+          </div>
+        </form>
+      </div>
+
     </div>
   )
 }

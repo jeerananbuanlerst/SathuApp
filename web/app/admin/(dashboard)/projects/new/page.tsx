@@ -28,7 +28,9 @@ export default function NewProjectPage() {
   const [category, setCategory] = useState(categories[0])
   const [goal, setGoal] = useState("")
   const [endDate, setEndDate] = useState("")
-  const [imagePreview, setImagePreview] = useState("") // เริ่มต้นเป็นค่าว่าง ไม่ใส่รูปมั่วๆ
+  
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState("")
   const [loading, setLoading] = useState(false)
   
   const fileRef = useRef<HTMLInputElement>(null)
@@ -36,8 +38,23 @@ export default function NewProjectPage() {
   const handleFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
+      setImageFile(file)
       setImagePreview(URL.createObjectURL(file))
     }
+  }
+
+  const uploadImageToSupabase = async (file: File): Promise<string> => {
+    const fileExt = file.name.split(".").pop()
+    const fileName = `proj_${Math.random()}.${fileExt}`
+
+    const { error: uploadError } = await supabase.storage
+      .from("activity-images")
+      .upload(fileName, file)
+
+    if (uploadError) throw new Error("อัปโหลดรูปภาพไม่สำเร็จ: " + uploadError.message)
+
+    const { data } = supabase.storage.from("activity-images").getPublicUrl(fileName)
+    return data.publicUrl
   }
 
   const handleSave = async (status: "active" | "draft") => {
@@ -48,6 +65,11 @@ export default function NewProjectPage() {
 
     setLoading(true)
     try {
+      let finalImageUrl = "https://images.unsplash.com/photo-1544816155-12df9643f363"
+      if (imageFile) {
+        finalImageUrl = await uploadImageToSupabase(imageFile)
+      }
+
       const { error } = await supabase.from("admin_projects").insert([
         {
           title,
@@ -57,7 +79,7 @@ export default function NewProjectPage() {
           raised: 0,
           donors: 0,
           end_date: endDate || null,
-          image: imagePreview || "https://images.unsplash.com/photo-1544816155-12df9643f363",
+          image: finalImageUrl,
           status: status,
         },
       ])
@@ -79,7 +101,6 @@ export default function NewProjectPage() {
   return (
     <div className="w-full max-w-5xl mx-auto py-8 px-6 space-y-6">
       
-      {/* ส่วนหัวตาม UI */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Link
@@ -103,7 +124,6 @@ export default function NewProjectPage() {
 
       <div className="bg-card rounded-2xl border border-border/60 p-8 shadow-sm space-y-6">
         
-        {/* วัตถุประสงค์การบริจาค */}
         <div className="space-y-3">
           <label className="block text-xs font-bold text-foreground">🎯 วัตถุประสงค์การบริจาค</label>
           <div className="flex flex-wrap gap-2.5">
@@ -125,7 +145,6 @@ export default function NewProjectPage() {
           </div>
         </div>
 
-        {/* อัปโหลดรูปกิจกรรม (เคลียร์รูปเริ่มต้นออก ให้กดเลือกเอง) */}
         <div className="space-y-3">
           <label className="block text-xs font-bold text-foreground">📸 อัปโหลดรูปกิจกรรม</label>
           {imagePreview ? (
@@ -134,8 +153,11 @@ export default function NewProjectPage() {
               <img src={imagePreview} alt="Preview" className="size-full object-cover" />
               <button
                 type="button"
-                onClick={() => setImagePreview("")}
-                className="absolute top-2 right-2 p-1.5 rounded-full bg-black/70 text-white"
+                onClick={() => {
+                  setImageFile(null)
+                  setImagePreview("")
+                }}
+                className="absolute top-2 right-2 p-1.5 rounded-full bg-black/70 text-white hover:bg-black transition"
               >
                 <X size={16} />
               </button>
@@ -153,7 +175,6 @@ export default function NewProjectPage() {
           <input ref={fileRef} type="file" accept="image/*" onChange={handleFiles} className="hidden" />
         </div>
 
-        {/* ชื่อโปรเจค */}
         <div>
           <label className="block text-xs font-bold text-foreground mb-1">ชื่อโปรเจค *</label>
           <input
@@ -166,7 +187,6 @@ export default function NewProjectPage() {
           />
         </div>
 
-        {/* เป้าหมายเงิน & วันปิดรับ */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <div>
             <label className="block text-xs font-bold text-foreground mb-1">เป้าหมายเงิน (บาท) *</label>
@@ -191,7 +211,6 @@ export default function NewProjectPage() {
           </div>
         </div>
 
-        {/* รายละเอียดโปรเจค */}
         <div>
           <label className="block text-xs font-bold text-foreground mb-1">รายละเอียดโปรเจค</label>
           <textarea
@@ -203,21 +222,25 @@ export default function NewProjectPage() {
           />
         </div>
 
-        {/* จำนวนเงินแนะนำให้ผู้บริจาคเลือก */}
+        {/* ปรับให้กดเลือกจำนวนเงินแนะนำได้จริง */}
         <div className="space-y-3">
           <label className="block text-xs font-bold text-foreground flex items-center gap-1.5">
-            <DollarSign size={16} className="text-primary" /> จำนวนเงินที่แนะนำให้ผู้บริจาคเลือก
+            <DollarSign size={16} className="text-primary" /> จำนวนเงินที่แนะนำให้ผู้บริจาคเลือก (คลิกเพื่อตั้งเป็นเป้าหมาย)
           </label>
           <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
             {quickAmounts.map((amt) => (
-              <div key={amt} className="py-3 rounded-xl bg-[#241A72]/10 text-[#241A72] text-xs font-bold text-center border border-[#241A72]/20">
-                {amt.toLocaleString()}
-              </div>
+              <button
+                type="button"
+                key={amt}
+                onClick={() => setGoal(amt.toString())}
+                className="py-3 rounded-xl bg-[#241A72]/10 text-[#241A72] text-xs font-bold text-center border border-[#241A72]/20 hover:bg-[#241A72] hover:text-white transition cursor-pointer"
+              >
+                {amt.toLocaleString()} บ.
+              </button>
             ))}
           </div>
         </div>
 
-        {/* ปุ่มกดเปิดรับบริจาค / บันทึกแบบร่าง */}
         <div className="space-y-3 pt-4">
           <button
             type="button"
@@ -225,7 +248,7 @@ export default function NewProjectPage() {
             onClick={() => handleSave("active")}
             className="w-full py-4 rounded-2xl bg-pink-400 text-white font-bold text-sm shadow-md hover:opacity-95 transition disabled:opacity-50"
           >
-            {loading ? "กำลังบันทึก..." : "เปิดรับบริจาค"}
+            {loading ? "กำลังอัปโหลดรูปและบันทึก..." : "เปิดรับบริจาค"}
           </button>
           <button
             type="button"
@@ -233,7 +256,7 @@ export default function NewProjectPage() {
             onClick={() => handleSave("draft")}
             className="w-full py-4 rounded-2xl bg-muted text-foreground font-bold text-sm hover:bg-muted/80 transition disabled:opacity-50"
           >
-            {loading ? "กำลังบันทึก..." : "บันทึกแบบร่าง"}
+            {loading ? "กำลังอัปโหลดรูปและบันทึก..." : "บันทึกแบบร่าง"}
           </button>
         </div>
 

@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import Image from "next/image"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation" // เพิ่ม useRouter เข้ามา
 import { cn } from "@/lib/utils"
 import {
   LayoutDashboard,
@@ -24,9 +24,17 @@ const nav = [
 
 export function Sidebar() {
   const pathname = usePathname()
+  const router = useRouter() // เรียกใช้งาน router สำหรับเปลี่ยนหน้า
   
   // เช็คว่าอยู่หน้าตั้งค่าอยู่หรือไม่ เพื่อใส่ Active State
   const isSettingsActive = pathname === "/admin/settings" || pathname.startsWith("/admin/settings/")
+
+  // ฟังก์ชันกดออกจากระบบ
+  const handleLogout = () => {
+    if (confirm("คุณต้องการออกจากระบบใช่หรือไม่?")) {
+      router.push("/admin/login") // พาไปหน้า login ทันที
+    }
+  }
 
   return (
     <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar px-4 py-6 lg:flex">
@@ -63,7 +71,6 @@ export function Sidebar() {
       </nav>
 
       <div className="mt-4 flex flex-col gap-1 border-t border-sidebar-border pt-4">
-        {/* เปลี่ยนจาก button เป็น Link ไปที่ /admin/settings */}
         <Link
           href="/admin/settings"
           className={cn(
@@ -77,7 +84,11 @@ export function Sidebar() {
           ตั้งค่า
         </Link>
 
-        <button className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-destructive transition-colors hover:bg-destructive/15">
+        {/* ปุ่มออกจากระบบ เชื่อมกับฟังก์ชัน handleLogout */}
+        <button 
+          onClick={handleLogout}
+          className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-destructive transition-colors hover:bg-destructive/15 w-full text-left"
+        >
           <LogOut className="size-5 shrink-0" strokeWidth={2} />
           ออกจากระบบ
         </button>

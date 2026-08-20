@@ -26,13 +26,22 @@ interface Activity {
   status: string;
 }
 
+interface Project {
+  id: string;
+  title: string;
+  image: string;
+  status: string;
+}
+
 export default function AdminDashboardPage() {
   const router = useRouter();
   const [recentActivities, setRecentActivities] = useState<Activity[]>([]);
+  const [latestProject, setLatestProject] = useState<Project | null>(null);
 
-  // ดึงข้อมูลกิจกรรมล่าสุดจาก Supabase
+  // ดึงข้อมูลกิจกรรมและโครงการล่าสุดจาก Supabase
   useEffect(() => {
     fetchRecentActivities();
+    fetchLatestProject();
   }, []);
 
   const fetchRecentActivities = async () => {
@@ -41,10 +50,23 @@ export default function AdminDashboardPage() {
       .select("id, title, location, date, time, status")
       .eq("status", "published")
       .order("date", { ascending: false })
-      .limit(2); // ดึงมาแสดง 2 รายการล่าสุด
+      .limit(2);
 
     if (data) {
       setRecentActivities(data);
+    }
+  };
+
+  const fetchLatestProject = async () => {
+    const { data } = await supabase
+      .from("admin_projects")
+      .select("id, title, image, status")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
+
+    if (data) {
+      setLatestProject(data);
     }
   };
 
@@ -59,7 +81,7 @@ export default function AdminDashboardPage() {
     {
       title: "รายงานการใช้เงิน",
       icon: <FileText className="text-blue-500" size={32} />,
-      path: "/admin/transparency", // เชื่อมไปหน้าความโปร่งใสแล้ว
+      path: "/admin/transparency",
       color: "bg-blue-500/10",
     },
     {
@@ -226,13 +248,13 @@ export default function AdminDashboardPage() {
             </div>
           </div>
 
-          {/* โปรเจกต์ระดมทุนยอดนิยม */}
+          {/* โปรเจกต์ระดมทุนยอดนิยม (ดึงข้อมูลล่าสุดจาก Supabase) */}
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-foreground">โปรเจกต์ระดมทุน</h3>
+            <h3 className="text-sm font-semibold text-foreground">โปรเจกต์ระดมทุนล่าสุด</h3>
             <div className="relative overflow-hidden rounded-2xl bg-card border border-border/60 shadow-sm group cursor-pointer" onClick={() => router.push("/admin/projects")}>
-              <div className="relative h-44 w-full">
+              <div className="relative h-44 w-full bg-muted">
                 <img 
-                  src="/buddha-bg.png" 
+                  src={latestProject?.image || "/buddha-bg.png"} 
                   alt="โปรเจกต์" 
                   className="absolute inset-0 h-full w-full object-cover opacity-85"
                 />
@@ -241,10 +263,10 @@ export default function AdminDashboardPage() {
                 <div className="absolute bottom-4 left-5 right-4 flex items-center justify-between text-white">
                   <div>
                     <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-primary/80 text-white mb-2 inline-block">
-                      กำลังระดมทุน
+                      {latestProject?.status === "active" ? "กำลังระดมทุน" : "โครงการล่าสุด"}
                     </span>
                     <h4 className="text-base font-bold drop-shadow-sm">
-                      บริจาคอาหารให้กับสุนัขจรจัด 24 ตัว
+                      {latestProject?.title || "ยังไม่มีโครงการระดมทุน"}
                     </h4>
                   </div>
                   <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-foreground shadow-md transition group-hover:scale-110">

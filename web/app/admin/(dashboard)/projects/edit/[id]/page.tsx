@@ -1,9 +1,10 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter, useParams } from "next/navigation"
-import { ArrowLeft, Save } from "lucide-react"
+import { ArrowLeft, Save, ImagePlus, X } from "lucide-react"
+import Image from "next/image"
 import { supabase } from "@/lib/supabase/client"
 
 export default function EditProjectPage() {
@@ -15,8 +16,12 @@ export default function EditProjectPage() {
   const [description, setDescription] = useState("")
   const [goal, setGoal] = useState("")
   const [endDate, setEndDate] = useState("")
+  const [imagePreview, setImagePreview] = useState("")
+  const [imageFile, setImageFile] = useState<File | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  
+  const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (id) fetchProjectDetails()
@@ -24,7 +29,7 @@ export default function EditProjectPage() {
 
   const fetchProjectDetails = async () => {
     setLoading(true)
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("admin_projects")
       .select("*")
       .eq("id", id)
@@ -35,6 +40,7 @@ export default function EditProjectPage() {
       setDescription(data.description || "")
       setGoal(String(data.goal || ""))
       setEndDate(data.end_date || "")
+      setImagePreview(data.image || "")
     } else {
       alert("ไม่พบข้อมูลโครงการ")
       router.push("/admin/projects")
@@ -42,26 +48,57 @@ export default function EditProjectPage() {
     setLoading(false)
   }
 
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setImageFile(file)
+      setImagePreview(URL.createObjectURL(file))
+    }
+  }
+
+  const uploadImageToSupabase = async (file: File): Promise<string> => {
+    const fileExt = file.name.split(".").pop()
+    const fileName = `proj_${Math.random()}.${fileExt}`
+
+    const { error: uploadError } = await supabase.storage
+      .from("activity-images")
+      .upload(fileName, file)
+
+    if (uploadError) throw uploadError
+
+    const { data } = supabase.storage.from("activity-images").getPublicUrl(fileName)
+    return data.publicUrl
+  }
+
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
 
-    const { error } = await supabase
-      .from("admin_projects")
-      .update({
-        title,
-        description,
-        goal: Number(goal),
-        end_date: endDate || null,
-      })
-      .eq("id", id)
+    try {
+      let finalImageUrl = imagePreview
+      if (imageFile) {
+        finalImageUrl = await uploadImageToSupabase(imageFile)
+      }
 
-    setSaving(false)
-    if (error) {
-      alert("อัปเดตไม่สำเร็จ: " + error.message)
-    } else {
+      const { error } = await supabase
+        .from("admin_projects")
+        .update({
+          title,
+          description,
+          goal: Number(goal),
+          end_date: endDate || null,
+          image: finalImageUrl,
+        })
+        .eq("id", id)
+
+      if (error) throw error
+
       alert("บันทึกการแก้ไขสำเร็จ!")
       router.push("/admin/projects")
+    } catch (err: any) {
+      alert("อัปเดตไม่สำเร็จ: " + err.message)
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -87,6 +124,35 @@ export default function EditProjectPage() {
       </div>
 
       <form onSubmit={handleUpdate} className="bg-card rounded-2xl border border-border/60 p-8 shadow-sm space-y-6">
+        
+        <div className="space-y-3">
+          <label className="block text-xs font-bold text-foreground">📸 รูปภาพโครงการ</label>
+          <div className="relative aspect-video w-full max-w-md rounded-2xl overflow-hidden border border-border bg-muted">
+            {imagePreview ? (
+              <>
+                <Image src={imagePreview} alt="Project Preview" fill sizes="(max-width: 768px) 100vw, 400px" className="object-cover" />
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  className="absolute bottom-3 right-3 px-3 py-1.5 rounded-xl bg-black/70 text-white text-xs font-semibold hover:bg-black transition z-10"
+                >
+                  เปลี่ยนรูปภาพ
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                className="flex flex-col items-center justify-center size-full text-muted-foreground hover:bg-muted/80 transition"
+              >
+                <ImagePlus size={28} className="mb-1 text-primary" />
+                <span className="text-xs font-semibold">คลิกเพื่ออัปโหลดรูปภาพ</span>
+              </button>
+            )}
+          </div>
+          <input ref={fileRef} type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
+        </div>
+
         <div>
           <label className="block text-xs font-bold text-foreground mb-1">ชื่อโปรเจค *</label>
           <input
