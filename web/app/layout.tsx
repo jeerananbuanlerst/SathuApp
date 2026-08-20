@@ -1,27 +1,59 @@
-import type { Metadata } from "next";
-import { Noto_Sans_Thai } from "next/font/google";
-import "./globals.css";
+import { Analytics } from '@vercel/analytics/next'
+import type { Metadata, Viewport } from 'next'
+import { Prompt, Sarabun } from 'next/font/google'
+import './globals.css'
 
-const notoThai = Noto_Sans_Thai({
-  subsets: ["thai", "latin"],
-  variable: "--font-sans",
-});
+const prompt = Prompt({
+  subsets: ['thai', 'latin'],
+  weight: ['500', '600', '700'],
+  variable: '--font-prompt',
+})
+
+const sarabun = Sarabun({
+  subsets: ['thai', 'latin'],
+  weight: ['300', '400', '500', '600', '700'],
+  variable: '--font-sarabun',
+})
 
 export const metadata: Metadata = {
-  title: "Sathu Admin",
-  description: "ระบบจัดการกิจกรรมทางศาสนา",
-};
+  title: 'สาธุ แอดมิน — แดชบอร์ด',
+  description: 'ระบบบริหารการบริจาควัด',
+  generator: 'v0.app',
+  icons: {
+    icon: [
+      {
+        url: '/icon-light-32x32.png',
+        media: '(prefers-color-scheme: light)',
+      },
+      {
+        url: '/icon-dark-32x32.png',
+        media: '(prefers-color-scheme: dark)',
+      },
+      {
+        url: '/icon.svg',
+        type: 'image/svg+xml',
+      },
+    ],
+    apple: '/apple-icon.png',
+  },
+}
+
+export const viewport: Viewport = {
+  colorScheme: 'light',
+  themeColor: '#ffffff',
+}
 
 export default function RootLayout({
   children,
 }: Readonly<{
-  children: React.ReactNode;
+  children: React.ReactNode
 }>) {
   return (
-    <html lang="th">
-      <body className={`${notoThai.variable}`}>
+    <html lang="th" className={`light bg-background ${prompt.variable} ${sarabun.variable}`}>
+      <body className="font-sans antialiased">
         {children}
+        {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>
-  );
+  )
 }

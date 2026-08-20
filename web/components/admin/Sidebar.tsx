@@ -1,136 +1,87 @@
-"use client";
+"use client"
 
-import Image from "next/image";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import Link from "next/link"
+import Image from "next/image"
+import { usePathname } from "next/navigation"
+import { cn } from "@/lib/utils"
 import {
   LayoutDashboard,
-  CheckSquare,
-  PlusCircle,
+  HeartHandshake,
+  Newspaper,
+  Users,
+  ShieldCheck,
+  Settings,
   LogOut,
-} from "lucide-react";
+} from "lucide-react"
 
-const links = [
-  {
-    href: "/admin/dashboard",
-    label: "Dashboard",
-    icon: LayoutDashboard,
-  },
-  {
-    href: "/admin/approval",
-    label: "อนุมัติกิจกรรม",
-    icon: CheckSquare,
-  },
-  {
-    href: "/admin/recommend",
-    label: "เพิ่มกิจกรรม",
-    icon: PlusCircle,
-  },
-];
+const nav = [
+  { href: "/admin/dashboard", label: "แดชบอร์ด", icon: LayoutDashboard },
+  { href: "/admin/projects", label: "โครงการบริจาค", icon: HeartHandshake },
+  { href: "/admin/activities", label: "โพสต์กิจกรรมวัด", icon: Newspaper },
+  { href: "/admin/donors", label: "รายชื่อผู้บริจาค", icon: Users },
+  { href: "/admin/transparency", label: "รายงานความโปร่งใส", icon: ShieldCheck },
+]
 
-export default function Sidebar() {
-  const pathname = usePathname();
+export function Sidebar() {
+  const pathname = usePathname()
+  
+  // เช็คว่าอยู่หน้าตั้งค่าอยู่หรือไม่ เพื่อใส่ Active State
+  const isSettingsActive = pathname === "/admin/settings" || pathname.startsWith("/admin/settings/")
 
   return (
-    <aside
-      className="relative flex h-screen w-72 flex-col overflow-hidden bg-cover bg-center text-white"
-      style={{
-        backgroundImage: "url('/sidebar-bg.png')",
-      }}
-    >
-      {/* Overlay */}
-      <div className="absolute inset-0 bg-[#1f4d39]/45 backdrop-blur-[1px]" />
-
-      {/* Content */}
-      <div className="relative z-10 flex h-full flex-col p-7">
-
-        {/* Logo */}
-        <div className="mb-12 flex items-center gap-4">
-
-          <div className="relative h-16 w-16">
-
-            <Image
-              src="/Logo.png"
-              alt="Sathu"
-              fill
-              priority
-              className="object-contain drop-shadow-xl"
-            />
-
-          </div>
-
-          <div>
-
-            <h1 className="text-3xl font-bold tracking-wide">
-              Sathu Admin
-            </h1>
-
-            <p className="mt-1 text-sm text-white/75">
-              ระบบจัดการกิจกรรม
-            </p>
-
-          </div>
-
+    <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar px-4 py-6 lg:flex">
+      <div className="flex items-center gap-3 px-2">
+        <div className="flex size-11 items-center justify-center rounded-2xl bg-primary/10">
+          <Image src="/Logo2.png" alt="โลโก้วัด" width={28} height={28} className="size-7 object-contain" />
         </div>
+        <div>
+          <p className="font-display text-base font-semibold text-sidebar-foreground leading-tight">สาธุ แอดมิน</p>
+          <p className="text-xs text-muted-foreground">วัดป่าสิริมงคล</p>
+        </div>
+      </div>
 
-        {/* Menu */}
-        <nav className="flex-1 space-y-3">
+      <nav className="mt-8 flex flex-1 flex-col gap-1">
+        {nav.map((item) => {
+          const active = pathname === item.href || pathname.startsWith(item.href + "/")
+          const Icon = item.icon
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
+                active
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+              )}
+            >
+              <Icon className="size-5 shrink-0" strokeWidth={2} />
+              {item.label}
+            </Link>
+          )
+        })}
+      </nav>
 
-          {links.map(({ href, label, icon: Icon }) => {
+      <div className="mt-4 flex flex-col gap-1 border-t border-sidebar-border pt-4">
+        {/* เปลี่ยนจาก button เป็น Link ไปที่ /admin/settings */}
+        <Link
+          href="/admin/settings"
+          className={cn(
+            "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
+            isSettingsActive
+              ? "bg-primary text-primary-foreground shadow-sm"
+              : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+          )}
+        >
+          <Settings className="size-5 shrink-0" strokeWidth={2} />
+          ตั้งค่า
+        </Link>
 
-            const active = pathname === href;
-
-            return (
-
-              <Link
-                key={href}
-                href={href}
-                className={`group flex items-center gap-4 rounded-2xl px-5 py-4 transition-all duration-300 ${
-                  active
-                    ? "bg-white/20 backdrop-blur-md border border-white/20 shadow-xl"
-                    : "hover:bg-white/10"
-                }`}
-              >
-
-                <Icon
-                  size={22}
-                  className={`${
-                    active
-                      ? "text-[#FFD5D2]"
-                      : "text-white/90 group-hover:text-white"
-                  }`}
-                />
-
-                <span
-                  className={`text-[17px] ${
-                    active
-                      ? "font-semibold text-white"
-                      : "text-white/85"
-                  }`}
-                >
-                  {label}
-                </span>
-
-              </Link>
-
-            );
-          })}
-
-        </nav>
-
-        {/* Logout */}
-
-       <button className="mt-auto flex items-center gap-4 rounded-2xl px-6 py-4 text-[#FFD7D3] transition-all duration-300 hover:bg-white/10">
-
-  <LogOut size={22} />
-
-  <span className="text-[17px] font-medium tracking-wide">
-    ออกจากระบบ
-  </span>
-
-</button>
-
+        <button className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-destructive transition-colors hover:bg-destructive/15">
+          <LogOut className="size-5 shrink-0" strokeWidth={2} />
+          ออกจากระบบ
+        </button>
       </div>
     </aside>
-  );
+  )
 }

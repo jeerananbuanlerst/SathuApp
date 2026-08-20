@@ -15,10 +15,12 @@ import {
 import Field from "./Field";
 import UploadBox from "./UploadBox";
 import SubmitButton from "./SubmitButton";
+import { provinceList } from "@/lib/data/thaiAddress";
+import { districts } from "thai-address-database";
 
 // สมมติฐานข้อมูล
-const PROVINCES = ["กรุงเทพมหานคร", "เชียงใหม่", "นครราชสีมา", "ขอนแก่น", "ภูเก็ต"];
-
+const PROVINCES = provinceList;
+6
 type FormState = {
   name: string;
   place: string;
@@ -40,6 +42,7 @@ export default function ActivityForm() {
   const [form, setForm] = useState<FormState>(initialForm);
   const [images, setImages] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+//เพิ่ม
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));

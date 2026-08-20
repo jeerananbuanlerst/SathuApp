@@ -18,7 +18,7 @@ export async function createClient() {
               cookieStore.set(name, value, options);
             });
           } catch {
-            // เรียกจาก Server Component จะไม่สามารถ set cookie ได้
+            // ป้องกัน Error เมื่อเรียกจาก Server Component
           }
         },
       },

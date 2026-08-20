@@ -1,7 +1,6 @@
 import Header from "@/components/recommend/Header";
 import Banner from "@/components/recommend/Banner";
 import ActivityForm from "@/components/recommend/ActivityForm";
-
 export default function RecommendPage() {
   return (
     <div className="space-y-8">
