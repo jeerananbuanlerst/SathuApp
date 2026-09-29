@@ -21,7 +21,7 @@ export async function POST(req: Request) {
 
     const supabase = await createClient();
 
-    // Login
+    // 1. ทำการ Login ผ่าน Supabase Auth
     const {
       data: { user },
       error: loginError,
@@ -47,24 +47,63 @@ export async function POST(req: Request) {
 
     console.log("Login Success :", user.email);
 
-    // ตรวจสอบสิทธิ์ Admin
-    const { data: admin, error: adminError } = await supabase
-      .from("admins")
-      .select("id, role")
-      .eq("id", user.id)
-      .single();
+    // 2. กรณีเป็น Super Admin หลัก (admin@sathu.com) อนุญาตผ่านทันที
+    if (user.email === "admin@sathu.com") {
+      return NextResponse.json({
+        success: true,
+        user,
+        admin: { id: user.id, role: "super_admin" },
+      });
+    }
 
-    console.log("========== ADMIN CHECK ==========");
-    console.log(admin);
-    console.log(adminError);
-    console.log("=================================");
+    // 3. ตรวจสอบสิทธิ์ว่าเป็นแอดมินวัดในตาราง temple_registrations หรือไม่
+    const { data: templeData, error: templeError } = await supabase
+      .from("temple_registrations")
+      .select("*")
+      .eq("email", user.email)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    if (adminError) {
+    console.log("========== TEMPLE ADMIN CHECK ==========");
+    console.log(templeData);
+    console.log(templeError);
+    console.log("========================================");
+
+    // ถ้าไม่พบข้อมูลในตาราง temple_registrations และไม่อยู่ในตาราง admins เดิม ให้ตีตก
+    if (templeError || !templeData) {
+      // ลองเช็กเผื่อเป็นแอดมินระบบเก่าในตาราง admins
+      const { data: legacyAdmin } = await supabase
+        .from("admins")
+        .select("id, role")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (!legacyAdmin) {
+        await supabase.auth.signOut();
+        return NextResponse.json(
+          {
+            error: "คุณไม่มีสิทธิ์เข้าใช้งานระบบ",
+          },
+          {
+            status: 403,
+          }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        user,
+        admin: legacyAdmin,
+      });
+    }
+
+    // 4. เช็กสถานะการอนุมัติของวัด
+    if (templeData.status !== "approved") {
       await supabase.auth.signOut();
-
       return NextResponse.json(
         {
-          error: "คุณไม่มีสิทธิ์เข้าใช้งานระบบ",
+          error: "คำขอลงทะเบียนวัดของคุณยังไม่ได้รับการอนุมัติจากทีมงาน Sathu",
         },
         {
           status: 403,
@@ -72,11 +111,13 @@ export async function POST(req: Request) {
       );
     }
 
+    // ผ่านการตรวจสอบทั้งหมด อนุญาตให้เข้าสู่ระบบได้
     return NextResponse.json({
       success: true,
       user,
-      admin,
+      admin: { id: user.id, role: "temple_admin", temple_name: templeData.temple_name },
     });
+
   } catch (error) {
     console.error("========== SERVER ERROR ==========");
     console.error(error);

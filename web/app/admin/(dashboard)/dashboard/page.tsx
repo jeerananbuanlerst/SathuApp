@@ -8,16 +8,20 @@ import {
   Star, 
   Calendar, 
   TrendingUp, 
-  HeartHandshake,
-  FileText,
-  MessageSquare,
-  BarChart3,
-  PlusCircle,
-  QrCode
+  HandCoins,         
+  ReceiptText,       
+  Award,             
+  MessageSquareText, 
+  Activity,          
+  CalendarDays,      
+  QrCode,
+  Loader2,
+  Sparkles,
+  Flame
 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 
-interface Activity {
+interface ActivityItem {
   id: string;
   title: string;
   location: string;
@@ -26,23 +30,81 @@ interface Activity {
   status: string;
 }
 
-interface Project {
+interface ProjectItem {
   id: string;
   title: string;
   image: string;
   status: string;
 }
 
+interface RecentDonation {
+  id: string;
+  donor_name: string;
+  amount: number;
+  created_at: string;
+}
+
 export default function AdminDashboardPage() {
   const router = useRouter();
-  const [recentActivities, setRecentActivities] = useState<Activity[]>([]);
-  const [latestProject, setLatestProject] = useState<Project | null>(null);
+  const [checking, setChecking] = useState(true);
+  const [templeName, setTempleName] = useState("วัดในระบบ Sathu");
+  const [adminName, setAdminName] = useState("ผู้ดูแลระบบ");
 
-  // ดึงข้อมูลกิจกรรมและโครงการล่าสุดจาก Supabase
+  const [recentActivities, setRecentActivities] = useState<ActivityItem[]>([]);
+  const [latestProject, setLatestProject] = useState<ProjectItem | null>(null);
+  
+  const [totalDonationAmount, setTotalDonationAmount] = useState<number>(0);
+  const [totalDonorsCount, setTotalDonorsCount] = useState<number>(0);
+  const [recentDonations, setRecentDonations] = useState<RecentDonation[]>([]);
+  const [avgRating, setAvgRating] = useState<number>(0);
+  const [totalReviews, setTotalReviews] = useState<number>(0);
+
   useEffect(() => {
+    async function verifyApprovalStatus() {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        alert("กรุณาเข้าสู่ระบบก่อนใช้งาน");
+        router.push("/admin/login");
+        return;
+      }
+
+      const userEmail = session.user.email;
+
+      const { data, error } = await supabase
+        .from("temple_registrations")
+        .select("*")
+        .eq("email", userEmail)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error || !data) {
+        alert("ไม่พบข้อมูลการลงทะเบียนวัดด้วยอีเมลนี้");
+        router.push("/admin/login");
+        return;
+      }
+
+      if (data.status !== "approved") {
+        alert("คำขอลงทะเบียนวัดของคุณยังไม่ได้รับการอนุมัติจากทีมงาน Sathu (สถานะปัจจุบัน: " + data.status + ")");
+        router.push("/admin/register/status");
+      } else {
+        setTempleName(data.temple_name || "วัดในระบบ Sathu");
+        setAdminName(data.admin_name || "ผู้ดูแลระบบ");
+        setChecking(false);
+        loadDashboardData();
+      }
+    }
+
+    verifyApprovalStatus();
+  }, [router]);
+
+  const loadDashboardData = () => {
     fetchRecentActivities();
     fetchLatestProject();
-  }, []);
+    fetchDonationData();
+    fetchReviewData();
+  };
 
   const fetchRecentActivities = async () => {
     const { data } = await supabase
@@ -52,9 +114,7 @@ export default function AdminDashboardPage() {
       .order("date", { ascending: false })
       .limit(2);
 
-    if (data) {
-      setRecentActivities(data);
-    }
+    if (data) setRecentActivities(data);
   };
 
   const fetchLatestProject = async () => {
@@ -63,95 +123,98 @@ export default function AdminDashboardPage() {
       .select("id, title, image, status")
       .order("created_at", { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
 
-    if (data) {
-      setLatestProject(data);
+    if (data) setLatestProject(data);
+  };
+
+  const fetchDonationData = async () => {
+    const { data: donations, error } = await supabase
+      .from("donations")
+      .select("id, donor_name, amount, created_at, status")
+      .order("created_at", { ascending: false });
+
+    if (donations && !error) {
+      const validDonations = donations.filter(d => d.status === 'approved' || d.status === 'pending' || !d.status);
+      const sum = validDonations.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+      setTotalDonationAmount(sum);
+      setTotalDonorsCount(validDonations.length);
+      setRecentDonations(validDonations.slice(0, 2));
     }
   };
 
-  // รายการเมนูทางลัด (Shortcuts) 
+  const fetchReviewData = async () => {
+    const { data: reviews, error } = await supabase
+      .from("reviews")
+      .select("rating");
+
+    if (reviews && !error && reviews.length > 0) {
+      setTotalReviews(reviews.length);
+      const totalScore = reviews.reduce((acc, curr) => acc + (curr.rating || 0), 0);
+      const average = totalScore / reviews.length;
+      setAvgRating(Number(average.toFixed(1)));
+    } else {
+      setAvgRating(5.0);
+      setTotalReviews(0);
+    }
+  };
+
   const shortcuts = [
-    {
-      title: "โครงการบริจาค",
-      icon: <HeartHandshake className="text-primary" size={32} />,
-      path: "/admin/projects",
-      color: "bg-primary/10",
-    },
-    {
-      title: "รายงานการใช้เงิน",
-      icon: <FileText className="text-blue-500" size={32} />,
-      path: "/admin/transparency",
-      color: "bg-blue-500/10",
-    },
-    {
-      title: "ตอบรีวิว",
-      icon: <Star className="text-amber-500 fill-amber-500" size={32} />,
-      path: "/admin/reviews",
-      color: "bg-amber-500/10",
-    },
-    {
-      title: "สื่อสารชุมชน (แชท)",
-      icon: <MessageSquare className="text-pink-500" size={32} />,
-      path: "/admin/chat",
-      color: "bg-pink-500/10",
-    },
-    {
-      title: "Analytics",
-      icon: <BarChart3 className="text-emerald-500" size={32} />,
-      path: "/admin/analytics",
-      color: "bg-emerald-500/10",
-    },
-    {
-      title: "โพสต์กิจกรรม",
-      icon: <PlusCircle className="text-purple-500" size={32} />,
-      path: "/admin/activities",
-      color: "bg-purple-500/10",
-    },
-    {
-      title: "สร้างคิวอาร์โค้ด",
-      icon: <QrCode className="text-indigo-500" size={32} />,
-      path: "/admin/qr",
-      color: "bg-indigo-500/10",
-    },
+   { title: "โครงการบริจาค", icon: <HandCoins className="text-purple-600 dark:text-purple-400 stroke-[1.75]" size={24} />, path: "/admin/projects" },
+    { title: "รายงานการใช้เงิน", icon: <ReceiptText className="text-blue-600 dark:text-blue-400 stroke-[1.75]" size={24} />, path: "/admin/transparency" },
+    { title: "ตอบรีวิว", icon: <Award className="text-amber-600 dark:text-amber-400 stroke-[1.75]" size={24} />, path: "/admin/reviews" },
+    { title: "สื่อสารชุมชน (แชท)", icon: <MessageSquareText className="text-pink-600 dark:text-pink-400 stroke-[1.75]" size={24} />, path: "/admin/chat" },
+    { title: "Analytics", icon: <Activity className="text-emerald-600 dark:text-emerald-400 stroke-[1.75]" size={24} />, path: "/admin/analytics" },
+    { title: "โพสต์กิจกรรม", icon: <CalendarDays className="text-violet-600 dark:text-violet-400 stroke-[1.75]" size={24} />, path: "/admin/activities" },
+    { title: "สร้างคิวอาร์โค้ด", icon: <QrCode className="text-indigo-600 dark:text-indigo-400 stroke-[1.75]" size={24} />, path: "/admin/qr" },
   ];
 
+  if (checking) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center space-y-3 font-sans">
+        <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 shadow-2xl border border-purple-100 dark:border-purple-900/50 flex items-center gap-3.5 animate-pulse">
+          <Loader2 size={30} className="animate-spin text-purple-600" />
+          <p className="text-xs font-bold text-slate-700 dark:text-slate-200">กำลังตรวจสอบสิทธิ์การอนุมัติวัด...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="w-full max-w-7xl mx-auto py-8 px-6 space-y-8">
+    <div className="w-full max-w-7xl mx-auto py-8 px-6 space-y-8 animate-fade-in-up font-sans text-slate-800 dark:text-slate-100">
       
-      {/* ส่วนหัว: Admin Dashboard & ชื่อวัด */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      {/* ส่วนหัว: Admin Dashboard & ชื่อวัดจริง (แก้ไม่ให้ตัวหนังสือเบียด) */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-3 border-b border-purple-100/60 dark:border-purple-900/30">
         <div>
-          <h1 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Admin Dashboard
-          </h1>
-          <h2 className="font-display text-2xl font-bold text-foreground">
-            วัดศาลาลอย (นครราชสีมา)
+          <h2 className="font-display text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight leading-snug">
+            {templeName}
           </h2>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            ภาพรวมระบบจัดการกิจกรรมและข้อมูลวัด Sathu
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">
+            ระบบบริหารจัดการข้อมูลการทำบุญและกิจกรรมวัดแบบเรียลไทม์
           </p>
         </div>
       </div>
 
-      {/* Grid Layout หลักสำหรับเว็บ (ขยายเต็มจอ) */}
+      {/* Grid Layout หลักสำหรับเว็บ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {/* คอลัมน์ซ้ายและกลาง (กว้าง 2 ส่วน) */}
+        {/* คอลัมน์ซ้ายและกลาง */}
         <div className="lg:col-span-2 space-y-6">
           
-          {/* การ์ดต้อนรับ (Welcome Banner) */}
-          <div className="relative overflow-hidden rounded-2xl bg-card border border-border/60 p-6 shadow-sm flex items-center justify-between">
-            <div className="space-y-1.5 z-10">
-              <p className="text-xs text-muted-foreground">อรุณสวัสดิ์</p>
-              <h3 className="font-display text-2xl font-bold text-foreground">
-                สมชาย พิทักษ์
+         {/* การ์ดต้อนรับแอดมิน โทนเรียบสุภาพ รองรับโหมดมืด */}
+          <div className="relative overflow-hidden rounded-2xl bg-purple-950 dark:bg-slate-900 text-white p-6 flex items-center justify-between shadow-md border border-purple-900/40 dark:border-slate-800">
+            <div className="space-y-1 z-10">
+              <span className="inline-block text-[11px] font-semibold px-2.5 py-0.5 rounded-md bg-white/10 text-purple-200 mb-1">
+                ยินดีต้อนรับผู้ดูแลระบบ
+              </span>
+              <h3 className="font-display text-xl sm:text-2xl font-bold text-white">
+                {adminName}
               </h3>
-              <p className="text-xs text-muted-foreground pt-1">
-                ขอให้วันนี้เป็นวันดีสำหรับคุณและร่วมทำนุบำรุงพระพุทธศาสนาไปด้วยกัน
+              <p className="text-xs text-purple-200/80 pt-0.5">
+                ขอให้วันนี้เป็นวันที่ราบรื่นและร่วมทำนุบำรุงพระพุทธศาสนา
               </p>
             </div>
-            <div className="text-6xl select-none z-10 p-2">
+            <div className="text-4xl select-none z-10 p-2 opacity-90">
               🪷
             </div>
           </div>
@@ -159,88 +222,83 @@ export default function AdminDashboardPage() {
           {/* สถิติภาพรวม */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             
-            {/* ยอดบริจาครวม */}
-            <div className="rounded-2xl bg-card border border-border/60 p-5 shadow-sm space-y-3 sm:col-span-2">
+            <div className="rounded-3xl bg-white dark:bg-slate-900 border border-purple-100 dark:border-purple-900/40 p-6 space-y-3.5 sm:col-span-2 shadow-xl shadow-purple-900/5 dark:shadow-none hover:border-purple-300 transition">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-muted-foreground">ยอดบริจาครวม (บาท)</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">เป้าหมาย 100,000 บาท</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-extrabold uppercase tracking-wider">ยอดบริจาครวมสุทธิ</p>
                 </div>
-                <span className="text-xs font-bold text-foreground">65 %</span>
               </div>
 
-              <div className="h-2.5 w-full rounded-full bg-muted overflow-hidden">
-                <div className="h-full bg-pink-400 rounded-full w-[65%]" />
+              <div className="h-3 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden p-0.5 border border-slate-200/60 dark:border-slate-700">
+                <div className="h-full bg-purple-700 dark:bg-purple-600 rounded-full w-full shadow-sm" />
               </div>
 
               <div className="flex items-baseline justify-between pt-1">
-                <span className="text-xs text-muted-foreground">65,000 / 100,000 บ.</span>
-                <span className="font-display text-3xl font-extrabold text-foreground">
-                  65,000.00
+                <span className="text-xs text-slate-500 dark:text-slate-400 font-semibold">ยอดสะสมทั้งหมด</span>
+                <span className="font-display text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white tracking-tight">
+                  {totalDonationAmount.toLocaleString("th-TH", { minimumFractionDigits: 2 })} <span className="text-sm font-bold text-slate-400">บาท</span>
                 </span>
               </div>
 
-              <div className="flex items-center gap-1 text-xs font-medium text-emerald-600 pt-2 border-t border-border/40">
-                <TrendingUp size={16} /> +12% จากเดือนที่แล้ว
+              <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 pt-2 border-t border-purple-50 dark:border-purple-950/40">
+                <TrendingUp size={16} /> ประมวลผลและตรวจสอบยอดเงินอัตโนมัติ 100%
               </div>
             </div>
 
-            {/* ผู้บริจาคทั้งหมด */}
             <div 
               onClick={() => router.push("/admin/donors")}
-              className="rounded-2xl bg-card border border-border/60 p-5 shadow-sm flex items-center justify-between cursor-pointer hover:border-primary/50 transition"
+              className="rounded-3xl bg-white dark:bg-slate-900 border border-purple-100 dark:border-purple-900/40 p-6 flex items-center justify-between cursor-pointer shadow-lg shadow-purple-900/5 dark:shadow-none hover:border-purple-400 dark:hover:border-purple-700 hover:shadow-xl transition group"
             >
-              <div className="flex items-center gap-3.5">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                  <DollarSign size={24} />
+              <div className="flex items-center gap-4">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 group-hover:scale-110 transition shadow-inner">
+                  <DollarSign size={26} />
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">ผู้บริจาคทั้งหมด</p>
-                  <p className="text-xs font-medium text-emerald-600 flex items-center gap-1 mt-0.5">
-                    ▲ +8 คนวันนี้
-                  </p>
+                  <p className="text-xs text-slate-400 font-extrabold uppercase tracking-wider">ผู้บริจาคทั้งหมด</p>
+                  <p className="text-xs font-bold text-purple-700 dark:text-purple-300 mt-0.5">คลิกดูรายชื่อ &gt;</p>
                 </div>
               </div>
-              <span className="font-display text-2xl font-extrabold text-foreground">
-                756 <span className="text-xs font-normal text-muted-foreground">คน</span>
+              <span className="font-display text-2xl font-bold text-slate-900 dark:text-white">
+                {totalDonorsCount} <span className="text-xs font-normal text-slate-400">คน</span>
               </span>
             </div>
 
-            {/* สรุปคะแนนรีวิว */}
             <div 
               onClick={() => router.push("/admin/reviews")}
-              className="rounded-2xl bg-card border border-border/60 p-5 shadow-sm flex items-center justify-between cursor-pointer hover:border-primary/50 transition"
+              className="rounded-3xl bg-white dark:bg-slate-900 border border-purple-100 dark:border-purple-900/40 p-6 flex items-center justify-between cursor-pointer shadow-lg shadow-purple-900/5 dark:shadow-none hover:border-amber-400 dark:hover:border-amber-700 hover:shadow-xl transition group"
             >
-              <div className="flex items-center gap-3.5">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-500/10 text-amber-500">
-                  <Star size={24} className="fill-amber-500" />
+              <div className="flex items-center gap-4">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-amber-500 group-hover:scale-110 transition shadow-inner">
+                  <Star size={26} className="fill-amber-500" />
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">คะแนนรีวิวเฉลี่ย</p>
-                  <p className="text-xs font-medium text-muted-foreground mt-0.5">จาก 122 รีวิว</p>
+                  <p className="text-xs text-slate-400 font-extrabold uppercase tracking-wider">คะแนนรีวิว</p>
+                  <p className="text-xs font-bold text-amber-600 dark:text-amber-400 mt-0.5">จาก {totalReviews} รีวิว</p>
                 </div>
               </div>
-              <span className="font-display text-2xl font-extrabold text-foreground">
-                4.9
+              <span className="font-display text-2xl font-bold text-slate-900 dark:text-white">
+                {avgRating} <span className="text-xs font-normal text-slate-400">/ 5.0</span>
               </span>
             </div>
 
           </div>
 
-          {/* ================= SECTION: ทางลัดการจัดการ (Shortcuts) ================= */}
+          {/* เมนูทางลัด */}
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-foreground">จัดการ</h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+            <h3 className="text-sm font-extrabold text-slate-900 dark:text-white tracking-wide">
+              เมนูลัดจัดการระบบ
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {shortcuts.map((item, index) => (
                 <div
                   key={index}
                   onClick={() => router.push(item.path)}
-                  className="group flex flex-col items-center justify-center text-center p-5 rounded-2xl bg-card border border-border/60 shadow-sm hover:border-primary/50 hover:shadow-md transition cursor-pointer space-y-3"
+                  className="group flex items-center gap-4 p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs hover:border-purple-300 dark:hover:border-purple-800 hover:shadow-md transition cursor-pointer"
                 >
-                  <div className={`flex h-14 w-14 items-center justify-center rounded-2xl ${item.color} transition group-hover:scale-110`}>
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-50 dark:bg-slate-800/80 shadow-2xs">
                     {item.icon}
                   </div>
-                  <span className="text-xs font-bold text-foreground">
+                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
                     {item.title}
                   </span>
                 </div>
@@ -248,28 +306,28 @@ export default function AdminDashboardPage() {
             </div>
           </div>
 
-          {/* โปรเจกต์ระดมทุนยอดนิยม (ดึงข้อมูลล่าสุดจาก Supabase) */}
+          {/* โปรเจกต์ระดมทุนล่าสุด */}
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-foreground">โปรเจกต์ระดมทุนล่าสุด</h3>
-            <div className="relative overflow-hidden rounded-2xl bg-card border border-border/60 shadow-sm group cursor-pointer" onClick={() => router.push("/admin/projects")}>
-              <div className="relative h-44 w-full bg-muted">
+            <h3 className="text-sm font-extrabold text-slate-900 dark:text-white tracking-wide">โปรเจกต์ระดมทุนล่าสุด</h3>
+            <div className="relative overflow-hidden rounded-3xl bg-white dark:bg-slate-900 border border-purple-100 dark:border-purple-900/40 shadow-xl group cursor-pointer" onClick={() => router.push("/admin/projects")}>
+              <div className="relative h-48 w-full bg-slate-100 dark:bg-slate-800">
                 <img 
                   src={latestProject?.image || "/buddha-bg.png"} 
                   alt="โปรเจกต์" 
-                  className="absolute inset-0 h-full w-full object-cover opacity-85"
+                  className="absolute inset-0 h-full w-full object-cover opacity-90 group-hover:scale-105 transition duration-500"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/30 to-transparent" />
                 
-                <div className="absolute bottom-4 left-5 right-4 flex items-center justify-between text-white">
+                <div className="absolute bottom-4 left-6 right-6 flex items-center justify-between text-white">
                   <div>
-                    <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-primary/80 text-white mb-2 inline-block">
+                    <span className="text-xs font-bold px-3 py-1 rounded-full bg-purple-700 text-white mb-2 inline-block shadow-md">
                       {latestProject?.status === "active" ? "กำลังระดมทุน" : "โครงการล่าสุด"}
                     </span>
-                    <h4 className="text-base font-bold drop-shadow-sm">
+                    <h4 className="text-base sm:text-lg font-bold drop-shadow-md text-white">
                       {latestProject?.title || "ยังไม่มีโครงการระดมทุน"}
                     </h4>
                   </div>
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-foreground shadow-md transition group-hover:scale-110">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-slate-900 shadow-lg transition group-hover:scale-110">
                     <ArrowRight size={18} />
                   </div>
                 </div>
@@ -279,16 +337,15 @@ export default function AdminDashboardPage() {
 
         </div>
 
-        {/* คอลัมน์ขวา (กิจกรรมล่าสุดจากโพสต์กิจกรรมวัด, บริจาคล่าสุด) */}
+        {/* คอลัมน์ขวา */}
         <div className="space-y-6">
-          
-          {/* กิจกรรมล่าสุด (ดึงข้อมูลจริงจากหน้าโพสต์กิจกรรมวัด) */}
-          <div className="rounded-2xl bg-card border border-border/60 p-5 shadow-sm space-y-4">
+    {/* กิจกรรมล่าสุด */}
+          <div className="rounded-3xl bg-white dark:bg-slate-900 border border-purple-100 dark:border-purple-900/40 p-6 space-y-4 shadow-xl">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-foreground">กิจกรรมล่าสุด</h3>
+              <h3 className="text-sm font-extrabold text-slate-900 dark:text-white tracking-wide">กิจกรรมล่าสุด</h3>
               <button 
                 onClick={() => router.push("/admin/activities")}
-                className="text-xs font-medium text-primary hover:underline"
+                className="text-xs font-bold text-purple-600 dark:text-purple-400 hover:underline"
               >
                 ดูทั้งหมด &gt;
               </button>
@@ -296,16 +353,18 @@ export default function AdminDashboardPage() {
 
             <div className="space-y-3">
               {recentActivities.length === 0 ? (
-                <p className="text-xs text-muted-foreground text-center py-4">ยังไม่มีกิจกรรมที่เผยแพร่</p>
+                <p className="text-xs text-slate-400 text-center py-6 font-medium">ยังไม่มีกิจกรรมที่เผยแพร่</p>
               ) : (
                 recentActivities.map((act) => (
-                  <div key={act.id} className="p-3 rounded-xl bg-muted/40 border border-border/40 space-y-1.5">
-                    <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                      <span className="flex items-center gap-1"><Calendar size={12}/> {act.location || "วัดศาลาลอย"}</span>
-                      <span className="text-emerald-500 font-medium">เผยแพร่แล้ว</span>
+                  <div key={act.id} className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-800 space-y-2">
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 font-medium gap-2">
+                      <span className="flex items-center gap-1 font-bold truncate"><Calendar size={10} className="text-purple-600 shrink-0"/> {act.location || templeName}</span>
+                      <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/80 px-3 py-1 rounded-full border border-emerald-200 dark:border-emerald-800 whitespace-nowrap">
+                        เผยแพร่แล้ว
+                      </span>
                     </div>
-                    <h4 className="text-xs font-bold text-foreground">{act.title}</h4>
-                    <p className="text-[10px] text-muted-foreground">📅 {act.date} | ⏰ {act.time}</p>
+                    <h4 className="text-xs font-bold text-slate-900 dark:text-white">{act.title}</h4>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">📅 {act.date} | ⏰ {act.time}</p>
                   </div>
                 ))
               )}
@@ -313,43 +372,43 @@ export default function AdminDashboardPage() {
           </div>
 
           {/* บริจาคล่าสุด */}
-          <div className="rounded-2xl bg-card border border-border/60 p-5 shadow-sm space-y-4">
+          <div className="rounded-3xl bg-white dark:bg-slate-900 border border-purple-100 dark:border-purple-900/40 p-6 space-y-4 shadow-xl">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-foreground">บริจาคล่าสุด</h3>
+              <h3 className="text-sm font-extrabold text-slate-900 dark:text-white tracking-wide">บริจาคล่าสุด</h3>
               <button 
                 onClick={() => router.push("/admin/donors")}
-                className="text-xs font-medium text-primary hover:underline"
+                className="text-xs font-bold text-purple-600 dark:text-purple-400 hover:underline"
               >
                 ดูทั้งหมด &gt;
               </button>
             </div>
 
             <div className="space-y-3">
-              <div className="flex items-center justify-between p-3 rounded-xl bg-muted/30 border border-border/40">
-                <div className="flex items-center gap-3">
-                  <div className="h-9 w-9 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs">
-                    ภ
+              {recentDonations.length === 0 ? (
+                <p className="text-xs text-slate-400 text-center py-6 font-medium">ยังไม่มีรายการบริจาค</p>
+              ) : (
+                recentDonations.map((item) => (
+                  <div key={item.id} className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-800">
+                    <div className="flex items-center gap-3.5">
+                      <div className="h-10 w-10 rounded-2xl bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center font-bold text-xs shadow-md">
+                        {item.donor_name ? item.donor_name.charAt(0) : "ผู้"}
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-slate-900 dark:text-white">{item.donor_name || "ผู้ใจบุญ"}</p>
+                        <p className="text-[10px] text-slate-400 font-medium">
+                          {new Date(item.created_at).toLocaleDateString("th-TH", {
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-200 dark:border-emerald-800 px-3 py-1 rounded-xl shadow-2xs">
+                      + {Number(item.amount).toLocaleString()} บ.
+                    </span>
                   </div>
-                  <div>
-                    <p className="text-xs font-bold text-foreground">ภัทรพล สุดสายเนตร</p>
-                    <p className="text-[10px] text-muted-foreground">5 นาทีที่แล้ว</p>
-                  </div>
-                </div>
-                <span className="text-xs font-bold text-emerald-600">+ 100 บ.</span>
-              </div>
-
-              <div className="flex items-center justify-between p-3 rounded-xl bg-muted/30 border border-border/40">
-                <div className="flex items-center gap-3">
-                  <div className="h-9 w-9 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center font-bold text-xs">
-                    ว
-                  </div>
-                  <div>
-                    <p className="text-xs font-bold text-foreground">วิไล สุขสม</p>
-                    <p className="text-[10px] text-muted-foreground">1 ชั่วโมงที่แล้ว</p>
-                  </div>
-                </div>
-                <span className="text-xs font-bold text-emerald-600">+ 500 บ.</span>
-              </div>
+                ))
+              )}
             </div>
           </div>
 

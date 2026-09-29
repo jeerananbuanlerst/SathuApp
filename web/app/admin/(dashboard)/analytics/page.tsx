@@ -1,168 +1,215 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, TrendingUp, BarChart3, PieChart, Users } from "lucide-react"
+import { ArrowLeft, BarChart3, TrendingUp, Users, Loader2, DollarSign, MessageSquare } from "lucide-react"
+import { supabase } from "@/lib/supabase/client"
+
+interface ProjectStat {
+  title: string;
+  amount: number;
+}
 
 export default function AnalyticsPage() {
   const router = useRouter()
   const [period, setPeriod] = useState<"7d" | "1m" | "3m" | "1y">("7d")
+  const [isLoading, setIsLoading] = useState(true)
+
+  const [totalAmount, setTotalAmount] = useState<number>(0)
+  const [totalDonors, setTotalDonors] = useState<number>(0)
+  const [projectStats, setProjectStats] = useState<ProjectStat[]>([])
+  const [reviewsCount, setReviewsCount] = useState<number>(0)
+
+  useEffect(() => {
+    const fetchAnalyticsData = async () => {
+      try {
+        setIsLoading(true)
+
+        const { data: donations, error: donationError } = await supabase
+          .from("donations")
+          .select("amount, donor_name, created_at, project_id")
+
+        if (donationError) throw donationError
+
+        if (donations) {
+          const sum = donations.reduce((acc, curr) => acc + Number(curr.amount || 0), 0)
+          setTotalAmount(sum)
+          setTotalDonors(donations.length)
+        }
+
+        const { data: projects, error: projectError } = await supabase
+          .from("admin_projects")
+          .select("id, title")
+
+        if (!projectError && projects && donations) {
+          const stats = projects.map(proj => {
+            const projDonations = donations.filter(d => d.project_id === proj.id)
+            const projSum = projDonations.reduce((acc, curr) => acc + Number(curr.amount || 0), 0)
+            return {
+              title: proj.title,
+              amount: projSum
+            }
+          })
+          setProjectStats(stats)
+        }
+
+        const { count, error: reviewError } = await supabase
+          .from("reviews")
+          .select("*", { count: "exact", head: true })
+
+        if (!reviewError && count !== null) {
+          setReviewsCount(count)
+        }
+
+      } catch (err) {
+        console.error("Error fetching analytics:", err)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchAnalyticsData()
+  }, [period])
+
+  const formatBaht = (amount: number) => {
+    return new Intl.NumberFormat("th-TH", {
+      style: "currency",
+      currency: "THB",
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    }).format(amount)
+  }
 
   return (
-    <div className="w-full max-w-5xl mx-auto py-8 px-6 space-y-6">
+    <div className="w-full max-w-7xl mx-auto py-8 px-6 space-y-8 font-sans text-slate-800 dark:text-slate-100 animate-fade-in-up">
       
-      {/* ส่วนหัว */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => router.push("/admin/dashboard")}
-          className="flex h-10 w-10 items-center justify-center rounded-xl bg-card border border-border text-foreground hover:bg-muted transition"
-        >
-          <ArrowLeft size={20} />
-        </button>
-        <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
-          Analytics
-        </h1>
-      </div>
-
-      {/* แท็บเลือกช่วงเวลา */}
-      <div className="flex items-center gap-2">
-        {[
-          { id: "7d", label: "7 วัน" },
-          { id: "1m", label: "1 เดือน" },
-          { id: "3m", label: "3 เดือน" },
-          { id: "1y", label: "1 ปี" },
-        ].map((item) => (
+      {/* ส่วนหัวพร้อมปุ่มย้อนกลับ */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
           <button
-            key={item.id}
-            onClick={() => setPeriod(item.id as any)}
-            className={`px-5 py-2 rounded-xl text-xs font-semibold transition ${
-              period === item.id
-                ? "bg-[#241A72] text-white shadow-sm"
-                : "bg-muted text-muted-foreground hover:bg-muted/80"
-            }`}
+            onClick={() => router.push("/admin/dashboard")}
+            className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition shadow-xs cursor-pointer shrink-0"
           >
-            {item.label}
+            <ArrowLeft size={20} />
           </button>
-        ))}
-      </div>
-
-      {/* การ์ดสรุปยอดบริจาค & กราฟ */}
-      <div className="bg-card rounded-2xl border border-border/60 p-6 shadow-sm space-y-6">
-        <div className="flex items-center justify-between">
           <div>
-            <h3 className="font-bold text-sm text-foreground flex items-center gap-2">
-              <BarChart3 size={18} className="text-primary" /> ยอดบริจาค
-            </h3>
-            <p className="text-xs text-muted-foreground">เปรียบเทียบกับช่วงก่อนหน้า</p>
+            <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white mt-0.5">
+              ข้อมูลสถิติเชิงลึก (Analytics)
+            </h1>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              วิเคราะห์ภาพรวมการระดมทุน สถิติยอดทำบุญ และความคิดเห็นของผู้มีจิตศรัทธา
+            </p>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 max-w-md">
-          <div className="bg-muted/30 p-4 rounded-xl border border-border/40 space-y-1">
-            <span className="text-xl font-extrabold text-foreground">85,652</span>
-            <p className="text-[11px] text-muted-foreground">ยอดรวม (บ.)</p>
-            <span className="text-[11px] font-semibold text-emerald-600 flex items-center gap-0.5">
-              ▲ +12%
-            </span>
-          </div>
-          <div className="bg-muted/30 p-4 rounded-xl border border-border/40 space-y-1">
-            <span className="text-xl font-extrabold text-foreground">5,256</span>
-            <p className="text-[11px] text-muted-foreground">ผู้บริจาค</p>
-            <span className="text-[11px] font-semibold text-emerald-600 flex items-center gap-0.5">
-              ▲ +17%
-            </span>
-          </div>
-        </div>
-
-        {/* กราฟจำลองตามดีไซน์ */}
-        <div className="pt-4 border-t border-border/40 space-y-2">
-          <div className="flex justify-between text-[11px] text-muted-foreground pb-2">
-            <span>สูง</span>
-            <span>กลาง</span>
-            <span>ต่ำ</span>
-          </div>
-          <div className="h-32 w-full flex items-end justify-between px-4 bg-muted/20 rounded-xl relative">
-            <div className="absolute inset-x-0 top-1/3 border-b border-dashed border-border/60" />
-            <div className="absolute inset-x-0 top-2/3 border-b border-dashed border-border/60" />
-            {["อา.", "จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส."].map((day, idx) => (
-              <div key={idx} className="flex flex-col items-center gap-2 z-10 pb-2">
-                <div className="w-2.5 bg-primary rounded-full" style={{ height: `${(idx + 2) * 12}px` }} />
-                <span className="text-[10px] text-muted-foreground">{day}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* ยอดบริจาคตามโปรเจค 30 วันล่าสุด */}
-      <div className="bg-card rounded-2xl border border-border/60 p-6 shadow-sm space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="font-bold text-sm text-foreground">ยอดบริจาคตามโปรเจค</h3>
-          <span className="text-xs text-muted-foreground">30 วันล่าสุด</span>
-        </div>
-
-        <div className="space-y-4 pt-2">
+        {/* แท็บเลือกช่วงเวลา */}
+        <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-1.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 shadow-2xs">
           {[
-            { title: "บริจาคอาหารให้กับสุนัขจรจัด 24 ตัว", amount: "65,000 บ.", w: "85%" },
-            { title: "ดูดวง & เสียมซี", amount: "1,750 บ.", w: "25%" },
-            { title: "ร่วมเป็นเจ้าภาพจัดงานลอยกระทง", amount: "35,000 บ.", w: "60%" },
-            { title: "ทำบุญวันลอยกระทง", amount: "10,000 บ.", w: "95%" },
-          ].map((item, i) => (
-            <div key={i} className="space-y-1.5">
-              <div className="flex justify-between text-xs font-semibold">
-                <span className="text-foreground">{item.title}</span>
-                <span className="text-primary">{item.amount}</span>
-              </div>
-              <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-                <div className="h-full bg-pink-400 rounded-full" style={{ width: item.w }} />
-              </div>
-            </div>
+            { id: "7d", label: "7 วัน" },
+            { id: "1m", label: "1 เดือน" },
+            { id: "3m", label: "3 เดือน" },
+            { id: "1y", label: "1 ปี" },
+          ].map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setPeriod(item.id as any)}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                period === item.id
+                  ? "bg-white dark:bg-slate-900 text-purple-700 dark:text-purple-400 shadow-sm"
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+              }`}
+            >
+              {item.label}
+            </button>
           ))}
         </div>
       </div>
 
-      {/* สัดส่วนประเภทผู้บริจาค & กิจกรรมที่ได้รับความสนใจสูงสุด */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-card rounded-2xl border border-border/60 p-6 shadow-sm space-y-4">
-          <h3 className="font-bold text-sm text-foreground">สัดส่วนประเภทผู้บริจาค</h3>
-          <div className="flex items-center justify-around py-4">
-            <div className="relative size-28 rounded-full border-8 border-primary flex items-center justify-center font-bold text-sm">
-              55%
-              <div className="absolute inset-0 rounded-full border-8 border-pink-400 clip-path-half" />
-            </div>
-            <div className="space-y-2 text-xs">
-              <div className="flex items-center gap-2">
-                <div className="size-3 rounded bg-primary" />
-                <span className="text-muted-foreground">ผู้บริจาครายประจำ (55%)</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="size-3 rounded bg-pink-400" />
-                <span className="text-muted-foreground">ผู้บริจาครายใหม่ (45%)</span>
-              </div>
-            </div>
-          </div>
+      {/* การ์ดสรุปยอดบริจาค & ภาพรวม */}
+      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 md:p-7 shadow-xl border border-purple-100 dark:border-purple-900/40 space-y-6">
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
+          <h3 className="font-display text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <BarChart3 size={18} className="text-purple-600 dark:text-purple-400" /> สถิติภาพรวมการบริจาค
+          </h3>
         </div>
 
-        <div className="bg-card rounded-2xl border border-border/60 p-6 shadow-sm space-y-4">
-          <h3 className="font-bold text-sm text-foreground">กิจกรรมที่ได้รับความสนใจสูงสุด</h3>
-          <div className="space-y-3 pt-2">
-            {[
-              { name: "ตักบาตร", count: "111 คน", w: "90%" },
-              { name: "ฟังธรรม", count: "56 คน", w: "50%" },
-              { name: "ประเพณี", count: "16 คน", w: "20%" },
-            ].map((act, i) => (
-              <div key={i} className="space-y-1">
-                <div className="flex justify-between text-xs font-semibold">
-                  <span className="text-foreground">{act.name}</span>
-                  <span className="text-muted-foreground">{act.count}</span>
-                </div>
-                <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-                  <div className="h-full bg-pink-400 rounded-full" style={{ width: act.w }} />
-                </div>
-              </div>
-            ))}
+        {isLoading ? (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="size-8 animate-spin text-purple-600" />
           </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <div className="bg-purple-50/50 dark:bg-purple-950/30 p-5 rounded-2xl border border-purple-100 dark:border-purple-900/50 space-y-1.5 shadow-2xs">
+              <span className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">{formatBaht(totalAmount)}</span>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">ยอดบริจาครวมทั้งหมด (บาท)</p>
+            </div>
+            
+            <div className="bg-purple-50/50 dark:bg-purple-950/30 p-5 rounded-2xl border border-purple-100 dark:border-purple-900/50 space-y-1.5 shadow-2xs">
+              <span className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">{totalDonors.toLocaleString()} <span className="text-sm font-normal text-slate-400">คน</span></span>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">จำนวนครั้งและผู้ร่วมทำบุญ</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* ยอดบริจาคแยกตามโปรเจกต์ (กินพื้นที่ 2 คอลัมน์) */}
+        <div className="lg:col-span-2 bg-white dark:bg-slate-900 rounded-3xl p-6 md:p-7 shadow-xl border border-purple-100 dark:border-purple-900/40 space-y-5">
+          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
+            <h3 className="font-display text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <TrendingUp size={18} className="text-purple-600 dark:text-purple-400" /> ยอดบริจาคแยกตามโครงการระดมทุน
+            </h3>
+          </div>
+
+          {isLoading ? (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="size-8 animate-spin text-purple-600" />
+            </div>
+          ) : projectStats.length === 0 ? (
+            <p className="text-xs text-slate-400 text-center py-12 font-medium">ยังไม่มีข้อมูลโครงการระดมทุนในระบบ</p>
+          ) : (
+            <div className="space-y-5 pt-1">
+              {projectStats.map((item, i) => (
+                <div key={i} className="space-y-2">
+                  <div className="flex justify-between text-xs font-bold">
+                    <span className="text-slate-800 dark:text-slate-200">{item.title}</span>
+                    <span className="text-purple-700 dark:text-purple-300 font-black">{formatBaht(item.amount)}</span>
+                  </div>
+                  <div className="h-2.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-purple-700 dark:bg-purple-600 rounded-full transition-all duration-500" 
+                      style={{ width: `${Math.min(100, (item.amount / (totalAmount || 1)) * 100)}%` }} 
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
+
+        {/* สรุปข้อมูลรีวิวและความคิดเห็น (กินพื้นที่ 1 คอลัมน์) */}
+        <div className="lg:col-span-1 bg-white dark:bg-slate-900 rounded-3xl p-6 md:p-7 shadow-xl border border-purple-100 dark:border-purple-900/40 space-y-5 flex flex-col justify-between">
+          <div className="space-y-4">
+            <div className="border-b border-slate-100 dark:border-slate-800 pb-4">
+              <h3 className="font-display text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <MessageSquare size={18} className="text-purple-600 dark:text-purple-400" /> สถิติรีวิวและความคิดเห็น
+              </h3>
+            </div>
+            <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/60 dark:border-slate-800 space-y-2 shadow-2xs">
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">ความคิดเห็นทั้งหมดในระบบ</p>
+              <p className="text-3xl font-black text-slate-900 dark:text-white">{reviewsCount} <span className="text-xs font-normal text-slate-400">รีวิว</span></p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => router.push("/admin/reviews")}
+            className="w-full py-3.5 rounded-2xl bg-purple-700 hover:bg-purple-600 dark:bg-purple-600 dark:hover:bg-purple-500 text-white text-xs font-bold transition shadow-sm cursor-pointer flex items-center justify-center gap-2"
+          >
+            จัดการรีวิวและความคิดเห็น
+          </button>
+        </div>
+
       </div>
 
     </div>

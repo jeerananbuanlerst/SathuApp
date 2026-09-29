@@ -1,22 +1,19 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, ShieldCheck, Plus, Download, CheckCircle2, ImagePlus, X } from "lucide-react"
-import { Card, SectionHeading, Progress } from "@/components/admin/ui"
+import { ArrowLeft, Loader2, FileText, CheckCircle2, Clock } from "lucide-react"
 import { supabase } from "@/lib/supabase/client"
 
 export default function TransparencyPage() {
   const router = useRouter()
   const [projects, setProjects] = useState<any[]>([])
-  const [selectedProject, setSelectedProject] = useState("")
+  const [selectedProjectId, setSelectedProjectId] = useState("")
   const [reportDetail, setReportDetail] = useState("")
-  const [images, setImages] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
-  const fileRef = useRef<HTMLInputElement>(null)
 
-  // ดึงข้อมูลโครงการบริจาคจริงจาก Supabase (admin_projects)
+  // ดึงข้อมูลโครงการจริงจาก Supabase
   useEffect(() => {
     fetchProjects()
   }, [])
@@ -32,27 +29,35 @@ export default function TransparencyPage() {
     }
   }
 
-  const handleFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files
-    if (!files) return
-    const urls = Array.from(files).map((f) => URL.createObjectURL(f))
-    setImages((prev) => [...prev, ...urls])
-  }
-
-  const handlePublishReport = (e: React.FormEvent) => {
+  // ฟังก์ชันบันทึกข้อมูลการอัปเดตลง Supabase จริง
+  const handlePublishReport = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!selectedProject || !reportDetail) {
+    if (!selectedProjectId || !reportDetail.trim()) {
       alert("กรุณาเลือกโครงการและกรอกรายละเอียดความคืบหน้า")
       return
     }
+
     setLoading(true)
-    setTimeout(() => {
-      setLoading(false)
+    try {
+      const { error } = await supabase
+        .from("admin_projects")
+        .update({ 
+          description: reportDetail 
+        })
+        .eq("id", selectedProjectId)
+
+      if (error) throw error
+
       alert("อัปเดตรายงานความโปร่งใสสำเร็จ!")
-      setSelectedProject("")
+      setSelectedProjectId("")
       setReportDetail("")
-      setImages([])
-    }, 1000)
+      fetchProjects()
+    } catch (err: any) {
+      console.error("Error updating transparency:", err)
+      alert("เกิดข้อผิดพลาดในการอัปเดตข้อมูล")
+    } finally {
+      setLoading(false)
+    }
   }
 
   const formatBaht = (amount: number) => {
@@ -60,142 +65,122 @@ export default function TransparencyPage() {
   }
 
   return (
-    <div className="w-full max-w-4xl mx-auto py-8 px-6 space-y-6">
+    <div className="w-full max-w-7xl mx-auto py-8 px-6 space-y-8 font-sans text-slate-800 dark:text-slate-100 animate-fade-in-up">
       
-      {/* ส่วนหัวตาม UX/UI */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => router.push("/admin/dashboard")}
-          className="flex h-10 w-10 items-center justify-center rounded-xl bg-card border border-border text-foreground hover:bg-muted transition"
-        >
-          <ArrowLeft size={20} />
-        </button>
-        <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
-          รายงานความโปร่งใส
-        </h1>
+      {/* ส่วนหัว (เอาปุ่มลูกศรย้อนกลับออกตามสไตล์หน้าอื่น และปรับให้เต็มหน้าจอ) */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white mt-0.5">
+            รายงานความโปร่งใส
+          </h1>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            ติดตามและอัปเดตรายงานการใช้จ่ายงบประมาณโครงการระดมทุนภายในวัด
+          </p>
+        </div>
       </div>
 
-      {/* รายการโปรเจคทั้งหมดที่ดึงมาจาก admin/projects */}
-      <div className="space-y-4">
-        <h2 className="text-sm font-bold text-foreground">โปรเจคทั้งหมด</h2>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {projects.length === 0 ? (
-          <div className="text-center py-12 bg-card rounded-2xl border border-border/60 text-muted-foreground text-xs">
-            ยังไม่มีโครงการบริจาคในระบบ
+        {/* คอลัมน์ซ้าย: รายการโปรเจคทั้งหมด (กินพื้นที่ 2 ส่วน) */}
+        <div className="lg:col-span-2 space-y-4">
+          <div className="flex items-center justify-between bg-white dark:bg-slate-900 rounded-3xl border border-purple-100 dark:border-purple-900/40 p-5 shadow-xl">
+            <h2 className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2">
+              <FileText size={16} className="text-purple-600 dark:text-purple-400" /> โครงการระดมทุนทั้งหมดในระบบ
+            </h2>
           </div>
-        ) : (
-          projects.map((p) => {
-            const raised = p.raised || 0
-            const goal = p.goal || 1
-            const pct = Math.min(Math.round((raised / goal) * 100), 100)
-
-            return (
-              <div key={p.id} className="bg-card rounded-2xl border border-border/60 p-5 shadow-sm space-y-3">
-                <div className="flex items-start justify-between">
-                  <h3 className="text-sm font-bold text-foreground leading-snug">{p.title}</h3>
-                  <span className="px-3 py-1 rounded-full bg-amber-500/10 text-amber-600 text-[10px] font-semibold">
-                    {p.status === "active" ? "กำลังดำเนินการ" : "เสร็จสิ้น"}
-                  </span>
-                </div>
-
-                <div className="text-xs text-muted-foreground">
-                  เป้าหมาย {formatBaht(goal)}
-                </div>
-
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-xs font-semibold">
-                    <span className="text-foreground">{formatBaht(raised)} / {formatBaht(goal)}</span>
-                    <span className="text-muted-foreground">{pct} %</span>
-                  </div>
-                  <div className="h-2.5 w-full bg-muted rounded-full overflow-hidden">
-                    <div className="h-full bg-pink-400 rounded-full" style={{ width: `${pct}%` }} />
-                  </div>
-                </div>
-              </div>
-            )
-          })
-        )}
-      </div>
-
-      {/* ฟอร์ม: อัปเดตความคืบหน้า */}
-      <div className="bg-card rounded-2xl border border-border/60 p-6 shadow-sm space-y-5">
-        <h3 className="text-sm font-bold text-foreground">อัปเดตความคืบหน้า</h3>
-
-        <form onSubmit={handlePublishReport} className="space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-foreground mb-1">เลือกโปรเจค</label>
-            <select
-              value={selectedProject}
-              onChange={(e) => setSelectedProject(e.target.value)}
-              className="w-full rounded-xl border border-input bg-card px-4 py-3 text-xs text-foreground outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"
-            >
-              <option value="">เลือกโปรเจคของคุณ...</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.title}>
-                  {p.title}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-foreground mb-1">รายละเอียดความคืบหน้า</label>
-            <textarea
-              rows={4}
-              value={reportDetail}
-              onChange={(e) => setReportDetail(e.target.value)}
-              placeholder="รายงานเรื่อง..."
-              className="w-full rounded-xl border border-input bg-card px-4 py-3 text-xs text-foreground outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 resize-none"
-            />
-          </div>
-
-          {/* อัปโหลดรูปภาพรายงาน */}
-          <div className="space-y-2">
-            <div className="grid grid-cols-3 gap-3">
-              {images.map((src, i) => (
-                <div key={i} className="relative aspect-square rounded-xl overflow-hidden border border-border bg-muted">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={src} alt="Upload" className="size-full object-cover" />
-                  <button
-                    type="button"
-                    onClick={() => setImages(images.filter((_, idx) => idx !== i))}
-                    className="absolute top-1.5 right-1.5 p-1 rounded-full bg-black/70 text-white"
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-              ))}
-              <button
-                type="button"
-                onClick={() => fileRef.current?.click()}
-                className="flex flex-col items-center justify-center aspect-square rounded-xl border-2 border-dashed border-border bg-muted/20 hover:bg-muted/40 transition text-muted-foreground"
-              >
-                <Plus size={24} className="mb-1 text-primary" />
-                <span className="text-[10px] font-semibold">เพิ่มรูป</span>
-              </button>
+          
+          {projects.length === 0 ? (
+            <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-3xl border border-purple-100 dark:border-purple-900/40 text-slate-400 text-xs shadow-xl">
+              ยังไม่มีโครงการบริจาคในระบบ
             </div>
-            <input ref={fileRef} type="file" accept="image/*" multiple onChange={handleFiles} className="hidden" />
-          </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {projects.map((p) => {
+                const raised = p.raised || 0
+                const goal = p.goal || 1
+                const pct = Math.min(Math.round((raised / goal) * 100), 100)
+                const isEnded = p.status === "ended" || p.status === "closed"
 
-          {/* ปุ่มดำเนินการ */}
-          <div className="space-y-3 pt-2">
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-4 rounded-2xl bg-pink-400 text-white font-bold text-sm shadow-md hover:opacity-95 transition disabled:opacity-50"
-            >
-              {loading ? "กำลังอัปเดต..." : "อัปเดตรายงาน"}
-            </button>
+                return (
+                  <div key={p.id} className="bg-white dark:bg-slate-900 rounded-3xl border border-purple-100 dark:border-purple-900/40 p-6 shadow-xl space-y-4 flex flex-col justify-between">
+                    <div className="space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white leading-snug line-clamp-1">{p.title}</h3>
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 shrink-0 ${
+                          isEnded ? "bg-emerald-50 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800" : "bg-purple-50 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800"
+                        }`}>
+                          {isEnded ? <CheckCircle2 size={12}/> : <Clock size={12}/>}
+                          {isEnded ? "เสร็จสิ้น" : "กำลังดำเนินการ"}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2">{p.description || "ยังไม่มีรายละเอียดรายงานความโปร่งใส"}</p>
+                    </div>
 
-            <button
-              type="button"
-              onClick={() => alert("กำลังดาวน์โหลดและส่งออกรายงานเป็น PDF...")}
-              className="w-full py-3.5 rounded-2xl bg-card border border-border text-[#241A72] text-xs font-bold shadow-sm hover:bg-muted transition flex items-center justify-center gap-2"
-            >
-              <Download size={16} /> Export รายงานเป็น PDF ส่งให้ผู้บริจาค
-            </button>
+                    <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                      <div className="flex justify-between text-xs font-bold">
+                        <span className="text-slate-900 dark:text-white">{formatBaht(raised)} / {formatBaht(goal)}</span>
+                        <span className="text-purple-600 dark:text-purple-400">{pct} %</span>
+                      </div>
+                      <div className="h-2.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                        <div className="h-full bg-purple-700 dark:bg-purple-600 rounded-full" style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* คอลัมน์ขวา: ฟอร์มสำหรับอัปเดตความคืบหน้า */}
+        <div className="lg:col-span-1 space-y-4">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-purple-100 dark:border-purple-900/40 p-6 shadow-xl space-y-5">
+            <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+              อัปเดตความคืบหน้าโครงการ
+            </h3>
+
+            <form onSubmit={handlePublishReport} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">เลือกโปรเจค</label>
+                <select
+                  value={selectedProjectId}
+                  onChange={(e) => setSelectedProjectId(e.target.value)}
+                  className="w-full rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-4 py-3 text-xs text-slate-900 dark:text-slate-100 outline-none transition focus:border-purple-600 cursor-pointer shadow-2xs"
+                >
+                  <option value="">เลือกโปรเจคของคุณ...</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">รายละเอียดความคืบหน้า</label>
+                <textarea
+                  rows={5}
+                  value={reportDetail}
+                  onChange={(e) => setReportDetail(e.target.value)}
+                  placeholder="รายงานความคืบหน้าและสรุปการใช้จ่ายงบประมาณ..."
+                  className="w-full rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-4 py-3 text-xs text-slate-900 dark:text-slate-100 outline-none transition focus:border-purple-600 resize-none shadow-2xs"
+                />
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-3.5 rounded-2xl bg-purple-700 hover:bg-purple-600 dark:bg-purple-600 dark:hover:bg-purple-500 text-white font-bold text-xs shadow-sm transition disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
+                >
+                  {loading && <Loader2 className="size-4 animate-spin" />}
+                  {loading ? "กำลังบันทึกข้อมูล..." : "อัปเดตรายงานจริง"}
+                </button>
+              </div>
+            </form>
           </div>
-        </form>
+        </div>
+
       </div>
 
     </div>
